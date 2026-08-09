@@ -1,26 +1,976 @@
 @import "tailwindcss";
 
+/* ============================== Design tokens & reset */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --ink: #0b0b0b;
+  --charcoal: #494949;
+  --grey: #7c7a7a;
+  --paper: #f3f1eb;
+  --white: #fff;
+}
+* {
+  box-sizing: border-box;
+}
+html {
+  scroll-behavior: smooth;
+}
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-google-sans-flex), Arial, Helvetica, sans-serif;
+}
+a {
+  color: inherit;
+  text-decoration: none;
+}
+.shell {
+  width: min(1180px, calc(100% - 48px));
+  margin-inline: auto;
+}
+/* ============================== Site header & navigation */
+.site-header {
+  height: 104px;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  border-bottom: 1px solid rgba(11, 11, 11, 0.18);
+  position: relative;
+  z-index: 5;
+}
+.site-header nav {
+  display: flex;
+  gap: 34px;
+  font-size: 12px;
+  font-weight: 700;
+}
+.site-header nav a,
+footer a {
+  transition: opacity 0.2s;
+}
+.site-header nav a:hover,
+footer a:hover {
+  opacity: 0.55;
+}
+.site-header > .button {
+  justify-self: end;
+}
+.logo {
+  width: max-content;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+/* ============================== Shared SpeakUp identity */
+.brand-logo {
+  --brand-color: #0b0b0b;
+  color: var(--brand-color);
+  display: flex;
+  align-items: center;
+  width: max-content;
+  gap: 5px;
+}
+.brand-logo--inverse {
+  --brand-color: #fff;
+}
+.brand-logo__words {
+  display: flex;
+  flex-direction: column;
+  font-family: var(--font-flexing);
+  font-size: 25px;
+  line-height: 0.66;
+  letter-spacing: -1px;
+}
+.brand-logo__words b:last-child {
+  font-size: 30px;
+}
+.brand-logo__symbol {
+  width: 54px;
+  height: 52px;
+  position: relative;
+  display: block;
+}
+.brand-hand {
+  position: absolute;
+  left: 0;
+  top: 3px;
+  width: 34px;
+  height: 13px;
+  background: var(--brand-color);
+  border-radius: 8px 2px 8px 8px;
+  transform: rotate(-8deg);
+  z-index: 3;
+}
+.brand-hand:before {
+  content: "";
+  position: absolute;
+  left: -10px;
+  top: 2px;
+  width: 17px;
+  height: 11px;
+  background: var(--brand-color);
+  border-radius: 8px 0 0 8px;
+}
+.brand-hand:after {
+  content: "";
+  position: absolute;
+  right: -7px;
+  top: 3px;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background: var(--brand-color);
+}
+.brand-hand i {
+  position: absolute;
+  right: 0;
+  width: 16px;
+  height: 4px;
+  background: var(--brand-color);
+  border-radius: 4px;
+  transform-origin: right;
+}
+.brand-hand i:nth-child(1) {
+  top: -5px;
+  transform: rotate(18deg);
+}
+.brand-hand i:nth-child(2) {
+  top: 11px;
+  transform: rotate(-18deg);
+}
+.brand-hand i:nth-child(3) {
+  top: 16px;
+  right: 4px;
+  width: 12px;
+  transform: rotate(-28deg);
+}
+.brand-lantern {
+  position: absolute;
+  width: 31px;
+  height: 40px;
+  right: 0;
+  bottom: 0;
+}
+.brand-lantern__handle {
+  position: absolute;
+  left: 4px;
+  top: 0;
+  width: 23px;
+  height: 18px;
+  border: 2px solid var(--brand-color);
+  border-bottom: 0;
+  border-radius: 16px 16px 0 0;
+}
+.brand-lantern__top {
+  position: absolute;
+  left: 2px;
+  top: 12px;
+  width: 27px;
+  height: 6px;
+  background: var(--brand-color);
+  border-radius: 4px 4px 1px 1px;
+}
+.brand-lantern__frame {
+  position: absolute;
+  left: 4px;
+  top: 18px;
+  width: 23px;
+  height: 17px;
+  border: 2px solid var(--brand-color);
+  clip-path: polygon(12% 0, 88% 0, 100% 100%, 0 100%);
+}
+.brand-lantern__frame:before,
+.brand-lantern__frame:after {
+  content: "";
+  position: absolute;
+  width: 2px;
+  height: 22px;
+  background: var(--brand-color);
+  top: -3px;
+  left: 9px;
+  transform: rotate(34deg);
+}
+.brand-lantern__frame:after {
+  transform: rotate(-34deg);
+}
+.brand-lantern__frame i {
+  position: absolute;
+  width: 7px;
+  height: 10px;
+  background: var(--brand-color);
+  opacity: 0.3;
+  border-radius: 50% 50% 40% 40%;
+  left: 6px;
+  top: 4px;
+}
+.brand-lantern__base {
+  position: absolute;
+  left: 1px;
+  bottom: 0;
+  width: 29px;
+  height: 6px;
+  background: var(--brand-color);
+  border-radius: 1px 1px 5px 5px;
+}
+.brand-logo--compact {
+  transform: scale(0.8);
+  transform-origin: left center;
+}
+.logo__words {
+  display: flex;
+  flex-direction: column;
+  font-family: var(--font-flexing);
+  font-size: 24px;
+  line-height: 0.68;
+  letter-spacing: -1px;
+}
+.logo__words b:last-child {
+  font-size: 29px;
+}
+.lantern {
+  width: 190px;
+  height: 270px;
+  display: block;
+  position: relative;
+  filter: drop-shadow(0 0 22px rgba(255, 255, 255, 0.1));
+}
+.lantern__handle {
+  position: absolute;
+  width: 118px;
+  height: 92px;
+  border: 7px solid var(--ink);
+  border-bottom: 0;
+  border-radius: 70px 70px 0 0;
+  left: 36px;
+  top: 4px;
+}
+.lantern__cap,
+.lantern__base {
+  position: absolute;
+  background: var(--ink);
+  left: 25px;
+  width: 140px;
+  height: 22px;
+  border-radius: 10px 10px 3px 3px;
+}
+.lantern__cap {
+  top: 76px;
+}
+.lantern__base {
+  bottom: 18px;
+  height: 28px;
+  border-radius: 3px 3px 14px 14px;
+}
+.lantern__light {
+  position: absolute;
+  left: 40px;
+  top: 96px;
+  width: 110px;
+  height: 130px;
+  background: #dedbd2;
+  border: 8px solid var(--ink);
+  clip-path: polygon(10% 0, 90% 0, 100% 100%, 0 100%);
+  overflow: hidden;
+}
+.lantern__light span {
+  position: absolute;
+  width: 28px;
+  height: 55px;
+  border-radius: 50% 50% 46% 46%;
+  background: white;
+  left: 33px;
+  top: 45px;
+  box-shadow: 0 0 35px 14px white;
+}
+.lantern--compact {
+  width: 32px;
+  height: 45px;
+  transform: translateY(1px);
+}
+.lantern--compact .lantern__handle {
+  width: 22px;
+  height: 17px;
+  border-width: 2px;
+  left: 5px;
+  top: 0;
+}
+.lantern--compact .lantern__cap {
+  width: 28px;
+  height: 5px;
+  left: 2px;
+  top: 14px;
+}
+.lantern--compact .lantern__base {
+  width: 28px;
+  height: 6px;
+  left: 2px;
+  bottom: 1px;
+}
+.lantern--compact .lantern__light {
+  left: 5px;
+  top: 18px;
+  width: 22px;
+  height: 20px;
+  border-width: 2px;
+}
+.lantern--compact .lantern__light span {
+  width: 6px;
+  height: 9px;
+  left: 6px;
+  top: 6px;
+  box-shadow: 0 0 6px 2px white;
+}
+/* ============================== Shared controls & typography */
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
+  width: max-content;
+  background: var(--ink);
+  color: white;
+  padding: 18px 24px;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  transition:
+    transform 0.2s,
+    background 0.2s;
+}
+.button:hover {
+  transform: translateY(-2px);
+  background: var(--charcoal);
+}
+.button--small {
+  padding: 13px 17px;
+  gap: 17px;
+}
+/* ============================== Landing hero */
+.hero {
+  min-height: 690px;
+  display: grid;
+  grid-template-columns: 1.05fr 0.95fr;
+  align-items: center;
+  position: relative;
+  overflow: hidden;
+}
+.eyebrow,
+.section-label {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.18em;
+}
+.eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 26px;
+}
+.eyebrow span {
+  width: 26px;
+  height: 1px;
+  background: var(--ink);
+}
+h1,
+h2,
+blockquote {
+  font-family: var(--font-flexing);
+  font-weight: 400;
+  margin: 0;
+  letter-spacing: -0.045em;
+}
+h1 {
+  font-size: clamp(62px, 7.2vw, 106px);
+  line-height: 0.82;
+  position: relative;
+  z-index: 2;
+}
+h1 em,
+.join h2 em {
+  font-weight: 700;
+  font-style: italic;
+}
+.hero__lede {
+  color: var(--charcoal);
+  font-size: 16px;
+  line-height: 1.65;
+  max-width: 550px;
+  margin: 35px 0 28px;
+}
+.hero__actions {
+  display: flex;
+  align-items: center;
+  gap: 30px;
+}
+.text-link {
+  font-size: 12px;
+  font-weight: 800;
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  border-bottom: 1px solid;
+  padding-bottom: 5px;
+}
+.hero__art {
+  height: 570px;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.hero__mark-wrap {
+  position: relative;
+  z-index: 2;
+  width: min(235px, 55%);
+  aspect-ratio: 1;
+  display: grid;
+  place-items: center;
+}
+.hero__mark {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  transform: scaleX(-1);
+  filter: drop-shadow(0 18px 24px rgba(11, 11, 11, 0.12));
+}
+.orbit {
+  position: absolute;
+  border: 1px solid rgba(11, 11, 11, 0.18);
+  border-radius: 50%;
+}
+.orbit::after {
+  content: "";
+  position: absolute;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--ink);
+  left: 50%;
+  top: -3px;
+}
+.orbit--one {
+  width: 440px;
+  height: 440px;
+}
+.orbit--two {
+  width: 320px;
+  height: 320px;
+}
+.light-ray {
+  position: absolute;
+  width: 420px;
+  height: 200px;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.7));
+  transform: rotate(-24deg);
+  left: 40px;
+  top: 130px;
+  clip-path: polygon(0 46%, 100% 0, 100% 100%, 0 54%);
+}
+.scroll-note {
+  position: absolute;
+  right: 0;
+  bottom: 35px;
+  writing-mode: vertical-rl;
+  font-size: 9px;
+  letter-spacing: 0.15em;
+  font-weight: bold;
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+/* ============================== Carry the light campaign */
+.carry-light {
+  min-height: 680px;
+  background: #0b0b0b;
+  color: white;
+  display: grid;
+  grid-template-columns: 1.35fr 0.65fr;
+  overflow: hidden;
+}
+.carry-light__image {
+  min-height: 680px;
+  background-image:
+    linear-gradient(90deg, transparent 60%, #0b0b0b 100%), url("/assets/brand/carry-the-light.png");
+  background-size: cover;
+  background-position: center;
+}
+.carry-light__copy {
+  align-self: center;
+  padding: 70px 7vw 70px 3vw;
+  position: relative;
+  z-index: 2;
+}
+.carry-light__copy h2 {
+  font-size: clamp(58px, 6vw, 88px);
+  line-height: 0.86;
+  margin: 22px 0 30px;
+}
+.carry-light__copy h2 em {
+  font-weight: 700;
+}
+.carry-light__copy > p:not(.section-label) {
+  color: #bdbdbd;
+  font-size: 14px;
+  line-height: 1.75;
+  max-width: 430px;
+  margin-bottom: 30px;
+}
+.button--light {
+  background: white;
+  color: #0b0b0b;
+}
+.button--light:hover {
+  background: #d8d5ce;
+  color: #0b0b0b;
+}
+/* ============================== Calling & manifesto */
+.manifesto {
+  background: var(--ink);
+  color: white;
+  padding: 105px 0;
+}
+.manifesto__grid {
+  display: grid;
+  grid-template-columns: 0.55fr 1.35fr 0.9fr;
+  gap: 80px;
+  align-items: start;
+}
+blockquote {
+  font-size: clamp(42px, 5vw, 72px);
+  line-height: 0.96;
+}
+.verse {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.18em;
+  margin-top: 24px;
+}
+.manifesto__copy {
+  color: #bdbdbd;
+  font-size: 15px;
+  line-height: 1.75;
+  padding-top: 6px;
+}
+.manifesto__copy p:last-child {
+  color: white;
+  font-weight: bold;
+  margin-top: 24px;
+}
+/* ============================== Featured community posts */
+.feed-section {
+  padding: 115px 0 125px;
+}
+.section-heading {
+  display: grid;
+  grid-template-columns: 1fr 350px;
+  gap: 40px;
+  align-items: end;
+  margin-bottom: 65px;
+}
+.section-heading h2,
+.join h2 {
+  font-size: clamp(52px, 6vw, 80px);
+  line-height: 0.88;
+  margin-top: 18px;
+}
+.section-heading > p {
+  color: var(--charcoal);
+  line-height: 1.7;
+  font-size: 15px;
+}
+.post-grid {
+  display: grid;
+  grid-template-columns: 1.05fr 0.95fr;
+  gap: 18px;
+  align-items: stretch;
+}
+.post {
+  padding: 32px;
+  min-height: 340px;
+  display: flex;
+  flex-direction: column;
+}
+.post--dark {
+  background: var(--charcoal);
+  color: white;
+  grid-row: span 2;
+  min-height: 700px;
+  justify-content: space-between;
+  padding: 42px;
+}
+.post--paper {
+  background: #dedbd2;
+  min-height: 340px;
+}
+.post--outline {
+  border: 1px solid var(--grey);
+  min-height: 340px;
+}
+.post__meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.post__meta > span:last-child {
+  margin-left: auto;
+}
+.post__meta p {
+  display: flex;
+  flex-direction: column;
+  font-size: 12px;
+  gap: 4px;
+}
+.post__meta small {
+  font-size: 8px;
+  letter-spacing: 0.12em;
+  opacity: 0.65;
+}
+.avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: #dedbd2;
+  color: var(--ink);
+  display: grid;
+  place-items: center;
+  font-size: 10px;
+  font-weight: bold;
+}
+.avatar--light {
+  background: var(--ink);
+  color: white;
+}
+.post__quote {
+  font-family: var(--font-flexing);
+  font-size: 55px;
+  line-height: 0.93;
+  letter-spacing: -2px;
+  margin: 60px 0 25px;
+}
+.post__body {
+  font-size: 14px;
+  line-height: 1.7;
+  max-width: 500px;
+}
+.post__stats {
+  border-top: 1px solid currentColor;
+  margin-top: 28px;
+  padding-top: 18px;
+  display: flex;
+  gap: 25px;
+  font-size: 10px;
+  opacity: 0.75;
+}
+.post__stats span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.post__stats span:last-child {
+  margin-left: auto;
+}
+.post__tag {
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.15em;
+}
+.post__scripture {
+  font-family: var(--font-flexing);
+  font-size: 31px;
+  line-height: 1.05;
+  margin: 30px 0 0;
+}
+.post h3,
+.value-grid h3 {
+  font-family: var(--font-flexing);
+  font-size: 35px;
+  line-height: 1;
+  margin: 36px 0 14px;
+}
+.topic-row {
+  display: flex;
+  gap: 8px;
+  margin-top: auto;
+}
+.topic-row span {
+  border: 1px solid;
+  padding: 5px 7px;
+  font-size: 8px;
+  font-weight: bold;
+}
+/* ============================== Values & invitation */
+.values {
+  background: var(--charcoal);
+  color: white;
+  padding: 110px 0;
+}
+.section-heading--light > p {
+  color: #d1d1d1;
+}
+.value-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  border-top: 1px solid var(--grey);
+}
+.value-grid article {
+  padding: 38px 36px 10px 0;
+  border-right: 1px solid var(--grey);
+  min-height: 260px;
+}
+.value-grid article + article {
+  padding-left: 36px;
+}
+.value-grid article:last-child {
+  border-right: 0;
+}
+.value-grid article > span {
+  font-size: 10px;
+  opacity: 0.6;
+}
+.value-grid p {
+  color: #ccc;
+  font-size: 14px;
+  line-height: 1.7;
+}
+.join {
+  text-align: center;
+  padding: 130px 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.join h2 {
+  font-size: clamp(68px, 8vw, 112px);
+}
+.join > p:not(.section-label) {
+  max-width: 590px;
+  line-height: 1.7;
+  color: var(--charcoal);
+  margin: 32px 0;
+}
+/* ============================== Footer */
+footer {
+  background: var(--ink);
+  color: white;
+  padding: 70px 0 25px;
+}
+.logo--footer .lantern * {
+  border-color: white;
+  background-color: white;
+}
+.logo--footer .lantern__light {
+  background: #494949;
+}
+.logo--footer .lantern__light span {
+  background: white;
+}
+.footer__top {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  align-items: start;
+  padding-bottom: 70px;
+}
+.footer__top > p {
+  color: #aaa;
+  line-height: 1.6;
+  margin: 0;
+}
+.footer__top > div {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  justify-self: end;
+  font-size: 12px;
+}
+.footer__bottom {
+  border-top: 1px solid #333;
+  padding-top: 22px;
+  display: flex;
+  justify-content: space-between;
+  font-size: 8px;
+  letter-spacing: 0.18em;
+  color: #777;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+/* ============================== Responsive adjustments */
+@media (max-width: 800px) {
+  .shell {
+    width: min(100% - 28px, 620px);
+  }
+  .site-header {
+    height: 82px;
+    grid-template-columns: 1fr auto;
+  }
+  .site-header nav {
+    display: none;
+  }
+  .site-header .button {
+    font-size: 0;
+    gap: 0;
+    padding: 12px;
+  }
+  .site-header .button span {
+    font-size: 16px;
+  }
+  .hero {
+    grid-template-columns: 1fr;
+    padding: 85px 0 50px;
+  }
+  .hero__art {
+    height: 420px;
+    margin-top: 10px;
+    transform: scale(0.82);
+  }
+  .scroll-note {
+    display: none;
+  }
+  .carry-light {
+    grid-template-columns: 1fr;
+  }
+  .carry-light__image {
+    min-height: 480px;
+    background-image:
+      linear-gradient(0deg, #0b0b0b 0%, transparent 45%), url("/assets/brand/carry-the-light.png");
+    background-position: 63% center;
+  }
+  .carry-light__copy {
+    padding: 20px 28px 80px;
+    margin-top: -60px;
+  }
+  .manifesto__grid {
+    grid-template-columns: 1fr;
+    gap: 35px;
+  }
+  .manifesto {
+    padding: 75px 0;
+  }
+  .manifesto__copy {
+    max-width: 520px;
+  }
+  .section-heading {
+    grid-template-columns: 1fr;
+  }
+  .post-grid {
+    grid-template-columns: 1fr;
+  }
+  .post--dark {
+    min-height: 560px;
+  }
+  .feed-section {
+    padding: 85px 0;
+  }
+  .value-grid {
+    grid-template-columns: 1fr;
+  }
+  .value-grid article,
+  .value-grid article + article {
+    border-right: 0;
+    border-bottom: 1px solid var(--grey);
+    padding: 30px 0;
+    min-height: 0;
+  }
+  .value-grid article:last-child {
+    border-bottom: 0;
+  }
+  .footer__top {
+    grid-template-columns: 1fr 1fr;
+    gap: 45px;
+  }
+  .footer__top > p {
+    grid-column: 1/-1;
+    grid-row: 2;
+  }
+  .join {
+    padding: 95px 14px;
   }
 }
-
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+@media (max-width: 480px) {
+  h1 {
+    font-size: 56px;
+  }
+  .hero__lede {
+    font-size: 14px;
+  }
+  .hero__actions {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .hero__art {
+    margin-left: -35px;
+    margin-right: -35px;
+  }
+  .post {
+    padding: 25px;
+  }
+  .post--dark {
+    padding: 28px;
+  }
+  .post__quote {
+    font-size: 43px;
+  }
+  .footer__top {
+    grid-template-columns: 1fr;
+  }
+  .footer__top > div {
+    justify-self: start;
+  }
+  .footer__top > p {
+    grid-column: auto;
+    grid-row: auto;
+  }
+  .footer__bottom {
+    gap: 20px;
+  }
+}
+/* ============================== Accessibility & final brand refinements */
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  * {
+    transition: none !important;
+  }
+}
+.brand-logo__symbol {
+  width: 50px;
+}
+.brand-hand {
+  left: 4px;
+  top: 5px;
+  width: 31px;
+  height: 9px;
+}
+.brand-hand:before {
+  height: 8px;
+  top: 1px;
+}
+.brand-hand:after {
+  width: 12px;
+  height: 12px;
+  top: 1px;
+}
+.brand-hand i {
+  height: 3px;
+  width: 13px;
+}
+.brand-hand i:nth-child(1) {
+  top: -4px;
+}
+.brand-hand i:nth-child(2) {
+  top: 8px;
+}
+.brand-hand i:nth-child(3) {
+  top: 12px;
+}
+.brand-logo__asset {
+  width: 58px;
+  height: 58px;
+  object-fit: contain;
+  display: block;
+  margin-left: -14px;
+  transform: scaleX(-1);
+}
+.brand-logo--inverse .brand-logo__asset {
+  filter: invert(1);
 }
