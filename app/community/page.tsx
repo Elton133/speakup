@@ -31,29 +31,37 @@ import { BrandLogo } from "../components/brand-logo";
 import { GoogleAuthButton } from "../components/google-auth-button";
 import { seedPosts, topics } from "./data";
 import type { Post } from "./types";
+import {
+  createRemoteComment,
+  createRemotePost,
+  loadCommunity,
+  setRemoteLike,
+  setRemoteSaved,
+} from "./community-api";
 const Icon = ({ icon, size = 19 }: { icon: typeof Home01Icon; size?: number }) => (
   <HugeiconsIcon icon={icon} size={size} strokeWidth={1.7} aria-hidden="true" />
 );
 
 export default function Community() {
-  const [view, setView] = useState<"feed" | "saved" | "profile">("feed");
+  const [view, setView] = useState<"feed" | "explore" | "notices" | "saved" | "profile">("feed");
   const [posts, setPosts] = useState(seedPosts);
   const [filter, setFilter] = useState("For you");
   const [composer, setComposer] = useState(false);
   const [anonymous, setAnonymous] = useState(false);
   const [body, setBody] = useState("");
   const [topic, setTopic] = useState("Reflection");
-  const [openComments, setOpenComments] = useState<number | null>(null);
+  const [openComments, setOpenComments] = useState<string | null>(null);
   const [comment, setComment] = useState("");
   const [sharePost, setSharePost] = useState<Post | null>(null);
   const [shareCardUrl, setShareCardUrl] = useState<string | null>(null);
   const [identityOpen, setIdentityOpen] = useState(false);
   const [displayName, setDisplayName] = useState("Guest seeker");
   const [search, setSearch] = useState("");
-  const [openMenu, setOpenMenu] = useState<number | null>(null);
-  const [savedPosts, setSavedPosts] = useState<Set<number>>(new Set());
+  const [openMenu, setOpenMenu] = useState<string | null>(null);
+  const [savedPosts, setSavedPosts] = useState<Set<string>>(new Set());
   const [savedReady, setSavedReady] = useState(false);
   const [notice, setNotice] = useState("");
+  const [readNotices, setReadNotices] = useState<Set<number>>(new Set());
 
   useEffect(() => {
     try {
@@ -62,6 +70,17 @@ export default function Community() {
     } finally {
       setSavedReady(true);
     }
+  }, []);
+
+  useEffect(() => {
+    loadCommunity()
+      .then(({ posts: remotePosts, saved, user }) => {
+        if (remotePosts.length) setPosts([...remotePosts, ...seedPosts]);
+        if (saved.length) setSavedPosts((current) => new Set([...current, ...saved]));
+        if (user)
+          setDisplayName(user.user_metadata.full_name || user.email?.split("@")[0] || "Member");
+      })
+      .catch(() => notify("Using the offline community feed"));
   }, []);
 
   useEffect(() => {
@@ -82,47 +101,69 @@ export default function Community() {
     [posts, filter, search, savedPosts, view],
   );
 
-  function publish(e: FormEvent) {
+  async function publish(e: FormEvent) {
     e.preventDefault();
     if (!body.trim()) return;
     const name = anonymous ? "Anonymous" : displayName;
-    setPosts([
-      {
-        id: Date.now(),
-        author: name,
-        handle: anonymous ? "Identity protected" : "Guest contributor",
-        initials: anonymous
-          ? "A"
-          : name
-              .split(" ")
-              .map((x) => x[0])
-              .join("")
-              .slice(0, 2)
-              .toUpperCase(),
-        anonymous,
-        time: "now",
-        topic,
-        body: body.trim(),
-        likes: 0,
-        comments: [],
-      },
-      ...posts,
-    ]);
+    const localId = crypto.randomUUID();
+    const newPost: Post = {
+      id: localId,
+      author: name,
+      handle: anonymous ? "Identity protected" : "Guest contributor",
+      initials: anonymous
+        ? "A"
+        : name
+            .split(" ")
+            .map((x) => x[0])
+            .join("")
+            .slice(0, 2)
+            .toUpperCase(),
+      anonymous,
+      time: "now",
+      topic,
+      body: body.trim(),
+      likes: 0,
+      comments: [],
+    };
+    setPosts([newPost, ...posts]);
     setBody("");
     setComposer(false);
+    try {
+      const remoteId = await createRemotePost({ topic, body: newPost.body, anonymous });
+      if (remoteId) {
+        setPosts((current) =>
+          current.map((post) => (post.id === localId ? { ...post, id: remoteId } : post)),
+        );
+        notify("Thought published");
+      } else notify("Saved on this device — sign in to publish across devices");
+    } catch {
+      notify("Saved locally; the community database could not be reached");
+    }
   }
-  function like(id: number) {
-    setPosts(
-      posts.map((p) =>
-        p.id === id ? { ...p, liked: !p.liked, likes: p.likes + (p.liked ? -1 : 1) } : p,
+  async function like(id: string) {
+    const post = posts.find((item) => item.id === id);
+    if (!post) return;
+    const nextLiked = !post.liked;
+    setPosts((current) =>
+      current.map((item) =>
+        item.id === id
+          ? { ...item, liked: nextLiked, likes: item.likes + (nextLiked ? 1 : -1) }
+          : item,
       ),
     );
+    try {
+      const synced = await setRemoteLike(id, nextLiked);
+      if (!synced && !id.startsWith("seed-")) notify("Sign in to sync likes across devices");
+    } catch {
+      notify("Like saved locally");
+    }
   }
   function notify(message: string) {
     setNotice(message);
     window.setTimeout(() => setNotice(""), 2400);
   }
-  function toggleSaved(id: number) {
+  function toggleSaved(id: string) {
+    const willSave = !savedPosts.has(id);
     setSavedPosts((current) => {
       const next = new Set(current);
       if (next.has(id)) {
@@ -135,8 +176,9 @@ export default function Community() {
       return next;
     });
     setOpenMenu(null);
+    setRemoteSaved(id, willSave).catch(() => notify("Saved on this device only"));
   }
-  function hidePost(id: number) {
+  function hidePost(id: string) {
     setPosts((current) => current.filter((post) => post.id !== id));
     setOpenMenu(null);
     notify("Post hidden from your feed");
@@ -148,22 +190,40 @@ export default function Community() {
     setOpenMenu(null);
     notify("Post text copied");
   }
-  function addComment(id: number) {
+  async function addComment(id: string) {
     if (!comment.trim()) return;
+    const text = comment.trim();
+    const localId = crypto.randomUUID();
     setPosts(
       posts.map((p) =>
         p.id === id
           ? {
               ...p,
-              comments: [
-                ...p.comments,
-                { id: Date.now(), author: displayName, body: comment.trim() },
-              ],
+              comments: [...p.comments, { id: localId, author: displayName, body: text }],
             }
           : p,
       ),
     );
     setComment("");
+    try {
+      const remoteId = await createRemoteComment(id, text);
+      if (remoteId)
+        setPosts((current) =>
+          current.map((post) =>
+            post.id === id
+              ? {
+                  ...post,
+                  comments: post.comments.map((item) =>
+                    item.id === localId ? { ...item, id: remoteId } : item,
+                  ),
+                }
+              : post,
+          ),
+        );
+      else if (!id.startsWith("seed-")) notify("Sign in to sync comments across devices");
+    } catch {
+      notify("Comment saved locally");
+    }
   }
   function wrapText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number) {
     const words = text.split(" "),
@@ -195,7 +255,8 @@ export default function Community() {
         image.onerror = reject;
         image.src = src;
       });
-    const variant = Math.abs(post.id) % 5;
+    const variant =
+      [...post.id].reduce((total, character) => total + character.charCodeAt(0), 0) % 5;
     const palette = [
       { bg: "#ffffff", fg: "#0b0b0b" },
       { bg: "#dedbd2", fg: "#0b0b0b" },
@@ -314,16 +375,12 @@ export default function Community() {
           <button className={view === "feed" ? "active" : ""} onClick={() => setView("feed")}>
             <Icon icon={Home01Icon} /> <span>Home</span>
           </button>
-          <button
-            onClick={() =>
-              document.querySelector<HTMLInputElement>(".community-search input")?.focus()
-            }
-          >
+          <button className={view === "explore" ? "active" : ""} onClick={() => setView("explore")}>
             <Icon icon={Search01Icon} /> <span>Explore</span>
           </button>
-          <button>
+          <button className={view === "notices" ? "active" : ""} onClick={() => setView("notices")}>
             <Icon icon={Notification01Icon} /> <span>Notices</span>
-            <i>3</i>
+            {readNotices.size < 3 && <i>{3 - readNotices.size}</i>}
           </button>
           <button className={view === "saved" ? "active" : ""} onClick={() => setView("saved")}>
             <Icon icon={Bookmark02Icon} /> <span>Saved</span>
@@ -362,21 +419,29 @@ export default function Community() {
                 ? "YOUR IDENTITY"
                 : view === "saved"
                   ? "YOUR LIBRARY"
-                  : "THE COMMUNITY"}
+                  : view === "explore"
+                    ? "DISCOVER"
+                    : view === "notices"
+                      ? "YOUR UPDATES"
+                      : "THE COMMUNITY"}
             </p>
             <h1>
               {view === "profile"
                 ? "Your profile."
                 : view === "saved"
                   ? "Saved light."
-                  : "In the light."}
+                  : view === "explore"
+                    ? "Explore truth."
+                    : view === "notices"
+                      ? "Notices."
+                      : "In the light."}
             </h1>
           </div>
           <button className="mobile-compose" onClick={() => setComposer(true)}>
             <Icon icon={Add01Icon} />
           </button>
         </header>
-        {view !== "profile" && (
+        {view !== "profile" && view !== "notices" && (
           <div className="topic-tabs" role="tablist" aria-label="Filter conversations">
             {topics.map((t) => (
               <button
@@ -398,7 +463,7 @@ export default function Community() {
             <Icon icon={Add01Icon} />
           </button>
         )}
-        {view !== "profile" && (
+        {view !== "profile" && view !== "notices" && (
           <div className="mobile-search community-search">
             <Icon icon={Search01Icon} />
             <input
@@ -456,7 +521,59 @@ export default function Community() {
           </section>
         )}
 
-        {view !== "profile" && (
+        {view === "explore" && (
+          <section className="explore-intro">
+            <p className="section-label">SEARCH THE CONVERSATION</p>
+            <h2>Find the questions others are carrying.</h2>
+            <p>Search by phrase, author, or topic, then narrow the results with the topic bar.</p>
+          </section>
+        )}
+
+        {view === "notices" && (
+          <section className="notices-view">
+            <header>
+              <p>Updates from conversations and the SpeakUp community.</p>
+              <button onClick={() => setReadNotices(new Set([1, 2, 3]))}>Mark all as read</button>
+            </header>
+            {[
+              [
+                1,
+                "A new voice joined the conversation",
+                "Someone responded to a reflection you follow.",
+                "12 min",
+              ],
+              [
+                2,
+                "Your thought was carried forward",
+                "A community member shared your SpeakUp card.",
+                "1 hr",
+              ],
+              [
+                3,
+                "Community note",
+                "This week we are exploring faith beyond church walls.",
+                "Today",
+              ],
+            ].map(([id, title, copy, time]) => (
+              <button
+                className={`notice-item ${readNotices.has(id as number) ? "read" : ""}`}
+                key={id}
+                onClick={() => setReadNotices((current) => new Set([...current, id as number]))}
+              >
+                <span>
+                  <Icon icon={id === 3 ? Notification01Icon : Comment01Icon} />
+                </span>
+                <p>
+                  <b>{title}</b>
+                  <small>{copy}</small>
+                </p>
+                <time>{time}</time>
+              </button>
+            ))}
+          </section>
+        )}
+
+        {view !== "profile" && view !== "notices" && (
           <AnimatePresence mode="popLayout">
             {visible.map((post, index) => (
               <motion.article
@@ -594,7 +711,7 @@ export default function Community() {
             ))}
           </AnimatePresence>
         )}
-        {view !== "profile" && !visible.length && (
+        {view !== "profile" && view !== "notices" && !visible.length && (
           <div className="empty-feed">
             <h2>{view === "saved" ? "Nothing saved yet." : "Nothing hidden here."}</h2>
             <p>

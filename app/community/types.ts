@@ -1,11 +1,11 @@
 export type Comment = {
-  id: number;
+  id: string;
   author: string;
   body: string;
 };
 
 export type Post = {
-  id: number;
+  id: string;
   author: string;
   handle: string;
   initials: string;

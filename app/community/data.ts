@@ -11,7 +11,7 @@ export const topics = [
 
 export const seedPosts: Post[] = [
   {
-    id: 1,
+    id: "seed-1",
     author: "Amara Mensah",
     handle: "@amaralights",
     initials: "AM",
@@ -22,14 +22,14 @@ export const seedPosts: Post[] = [
     likes: 248,
     comments: [
       {
-        id: 11,
+        id: "seed-comment-11",
         author: "Joel K.",
         body: "This is the kind of witness people can actually feel.",
       },
     ],
   },
   {
-    id: 2,
+    id: "seed-2",
     author: "Anonymous",
     handle: "A quiet seeker",
     initials: "A",
@@ -41,7 +41,7 @@ export const seedPosts: Post[] = [
     comments: [],
   },
   {
-    id: 3,
+    id: "seed-3",
     author: "Joel Kato",
     handle: "@joelbeyondwalls",
     initials: "JK",
@@ -50,9 +50,13 @@ export const seedPosts: Post[] = [
     body: "The world disciples people seven days a week. What structures can we build that form people at work, online, and in our neighbourhoods—not only on Sunday?",
     likes: 183,
     comments: [
-      { id: 31, author: "Nia O.", body: "Small circles around vocation would be a strong start." },
       {
-        id: 32,
+        id: "seed-comment-31",
+        author: "Nia O.",
+        body: "Small circles around vocation would be a strong start.",
+      },
+      {
+        id: "seed-comment-32",
         author: "Anonymous",
         body: "And practical support systems, not just more meetings.",
       },

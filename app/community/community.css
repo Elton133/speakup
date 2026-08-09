@@ -678,9 +678,6 @@
   .community-sidebar nav button {
     padding: 12px;
   }
-  .community-sidebar nav button:nth-child(2) {
-    display: none;
-  }
   .community-main {
     padding-bottom: 67px;
   }
@@ -737,6 +734,124 @@
   }
   .topic-tabs {
     padding-inline: 8px;
+  }
+}
+
+/* ============================== Explore & notices */
+.explore-intro {
+  margin: 20px 36px 4px;
+  padding: 28px 30px;
+  color: white;
+  background: #494949;
+}
+.explore-intro h2 {
+  max-width: 570px;
+  margin: 10px 0;
+  font-family: var(--font-flexing);
+  font-size: 38px;
+  line-height: 1.02;
+}
+.explore-intro > p:last-child {
+  max-width: 620px;
+  color: #d4d1ca;
+  line-height: 1.6;
+}
+.notices-view {
+  margin: 28px 36px 80px;
+  border: 1px solid #cbc8c0;
+  background: #f2f0ea;
+}
+.notices-view > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 24px 28px;
+  border-bottom: 1px solid #d2cfc7;
+  color: #696762;
+  font-size: 13px;
+}
+.notices-view > header button {
+  border: 0;
+  border-bottom: 1px solid;
+  background: transparent;
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.notice-item {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 44px 1fr auto;
+  align-items: center;
+  gap: 16px;
+  padding: 25px 28px;
+  border: 0;
+  border-bottom: 1px solid #d2cfc7;
+  background: #ebe8e1;
+  text-align: left;
+  cursor: pointer;
+}
+.notice-item:last-child {
+  border-bottom: 0;
+}
+.notice-item.read {
+  background: transparent;
+  opacity: 0.7;
+}
+.notice-item > span {
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: #0b0b0b;
+  color: white;
+}
+.notice-item p b,
+.notice-item p small {
+  display: block;
+}
+.notice-item p small {
+  margin-top: 5px;
+  color: #6b6964;
+  line-height: 1.45;
+}
+.notice-item time {
+  color: #77746e;
+  font-size: 10px;
+}
+@media (max-width: 600px) {
+  .community-sidebar nav a,
+  .community-sidebar nav button {
+    padding-inline: 7px;
+  }
+  .explore-intro,
+  .notices-view {
+    margin-inline: 20px;
+  }
+  .explore-intro {
+    padding: 24px 22px;
+  }
+  .explore-intro h2 {
+    font-size: 31px;
+  }
+  .notices-view > header {
+    align-items: flex-start;
+    flex-direction: column;
+    padding: 22px;
+  }
+  .notice-item {
+    grid-template-columns: 38px 1fr;
+    padding: 22px;
+  }
+  .notice-item > span {
+    width: 36px;
+    height: 36px;
+  }
+  .notice-item time {
+    grid-column: 2;
   }
 }
 /* ============================== Branded share-card preview */
