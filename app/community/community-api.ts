@@ -38,12 +38,24 @@ function relativeTime(value: string) {
   return `${Math.floor(hours / 24)} d`;
 }
 
-export async function loadCommunity(): Promise<{
+export type CommunityNotice = {
+  id: string;
+  kind: "comment" | "like" | "community";
+  message: string;
+  isRead: boolean;
+  time: string;
+};
+
+export async function loadCommunity(
+  page = 0,
+  pageSize = 10,
+): Promise<{
   posts: Post[];
   saved: string[];
   user: User | null;
+  hasMore: boolean;
 }> {
-  if (!isSupabaseConfigured) return { posts: [], saved: [], user: null };
+  if (!isSupabaseConfigured) return { posts: [], saved: [], user: null, hasMore: false };
   const supabase = createClient();
   const { data: auth } = await supabase.auth.getUser();
   const user = auth.user;
@@ -52,7 +64,8 @@ export async function loadCommunity(): Promise<{
     .select(
       "id,author_id,topic,body,quote,is_anonymous,created_at,profiles!posts_author_id_fkey(display_name),comments(id,body,is_anonymous,profiles!comments_author_id_fkey(display_name)),post_likes(user_id)",
     )
-    .order("created_at", { ascending: false });
+    .order("created_at", { ascending: false })
+    .range(page * pageSize, page * pageSize + pageSize - 1);
   if (error) throw error;
 
   let saved: string[] = [];
@@ -64,6 +77,7 @@ export async function loadCommunity(): Promise<{
   return {
     user,
     saved,
+    hasMore: (data?.length ?? 0) === pageSize,
     posts: ((data ?? []) as unknown as PostRow[]).map((row) => {
       const name = row.is_anonymous ? "Anonymous" : row.profiles?.display_name || "SpeakUp member";
       return {
@@ -86,6 +100,75 @@ export async function loadCommunity(): Promise<{
       };
     }),
   };
+}
+
+export function subscribeToCommunity(onChange: () => void) {
+  if (!isSupabaseConfigured) return () => undefined;
+  const supabase = createClient();
+  const channel = supabase
+    .channel("speakup-community-changes")
+    .on("postgres_changes", { event: "*", schema: "public", table: "posts" }, onChange)
+    .on("postgres_changes", { event: "*", schema: "public", table: "comments" }, onChange)
+    .on("postgres_changes", { event: "*", schema: "public", table: "post_likes" }, onChange)
+    .subscribe();
+  return () => {
+    supabase.removeChannel(channel);
+  };
+}
+
+export async function loadNotifications(): Promise<CommunityNotice[]> {
+  if (!isSupabaseConfigured) return [];
+  const supabase = createClient();
+  const { data: auth } = await supabase.auth.getUser();
+  if (!auth.user) return [];
+  const { data, error } = await supabase
+    .from("notifications")
+    .select("id,kind,message,is_read,created_at")
+    .order("created_at", { ascending: false })
+    .limit(30);
+  if (error) throw error;
+  return (data ?? []).map((row) => ({
+    id: row.id as string,
+    kind: row.kind as CommunityNotice["kind"],
+    message: row.message as string,
+    isRead: row.is_read as boolean,
+    time: relativeTime(row.created_at as string),
+  }));
+}
+
+export async function markNotificationRead(id?: string) {
+  const supabase = createClient();
+  let query = supabase.from("notifications").update({ is_read: true }).eq("is_read", false);
+  if (id) query = query.eq("id", id);
+  const { error } = await query;
+  if (error) throw error;
+}
+
+export async function reportRemotePost(postId: string, reason = "other") {
+  if (postId.startsWith("seed-")) return false;
+  const supabase = createClient();
+  const { data } = await supabase.auth.getUser();
+  if (!data.user) return false;
+  const { error } = await supabase
+    .from("reports")
+    .upsert(
+      { reporter_id: data.user.id, post_id: postId, reason },
+      { onConflict: "reporter_id,post_id" },
+    );
+  if (error) throw error;
+  return true;
+}
+
+export async function updateRemoteProfile(displayName: string) {
+  const supabase = createClient();
+  const { data } = await supabase.auth.getUser();
+  if (!data.user) return false;
+  const { error } = await supabase
+    .from("profiles")
+    .update({ display_name: displayName })
+    .eq("id", data.user.id);
+  if (error) throw error;
+  return true;
 }
 
 export async function createRemotePost(input: { topic: string; body: string; anonymous: boolean }) {

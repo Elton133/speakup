@@ -34,9 +34,15 @@ import type { Post } from "./types";
 import {
   createRemoteComment,
   createRemotePost,
+  loadNotifications,
   loadCommunity,
+  markNotificationRead,
+  reportRemotePost,
   setRemoteLike,
   setRemoteSaved,
+  subscribeToCommunity,
+  updateRemoteProfile,
+  type CommunityNotice,
 } from "./community-api";
 const Icon = ({ icon, size = 19 }: { icon: typeof Home01Icon; size?: number }) => (
   <HugeiconsIcon icon={icon} size={size} strokeWidth={1.7} aria-hidden="true" />
@@ -61,7 +67,33 @@ export default function Community() {
   const [savedPosts, setSavedPosts] = useState<Set<string>>(new Set());
   const [savedReady, setSavedReady] = useState(false);
   const [notice, setNotice] = useState("");
-  const [readNotices, setReadNotices] = useState<Set<number>>(new Set());
+  const [communityNotices, setCommunityNotices] = useState<CommunityNotice[]>([
+    {
+      id: "sample-1",
+      kind: "comment",
+      message: "Someone responded to a reflection you follow.",
+      isRead: false,
+      time: "12 min",
+    },
+    {
+      id: "sample-2",
+      kind: "like",
+      message: "A community member shared your SpeakUp card.",
+      isRead: false,
+      time: "1 hr",
+    },
+    {
+      id: "sample-3",
+      kind: "community",
+      message: "This week we are exploring faith beyond church walls.",
+      isRead: false,
+      time: "Today",
+    },
+  ]);
+  const [loadingFeed, setLoadingFeed] = useState(true);
+  const [backendError, setBackendError] = useState("");
+  const [page, setPage] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
 
   useEffect(() => {
     try {
@@ -73,14 +105,36 @@ export default function Community() {
   }, []);
 
   useEffect(() => {
-    loadCommunity()
-      .then(({ posts: remotePosts, saved, user }) => {
+    Promise.all([loadCommunity(), loadNotifications()])
+      .then(([{ posts: remotePosts, saved, user, hasMore: more }, notices]) => {
         if (remotePosts.length) setPosts([...remotePosts, ...seedPosts]);
         if (saved.length) setSavedPosts((current) => new Set([...current, ...saved]));
         if (user)
           setDisplayName(user.user_metadata.full_name || user.email?.split("@")[0] || "Member");
+        if (notices.length) setCommunityNotices(notices);
+        setHasMore(more);
       })
-      .catch(() => notify("Using the offline community feed"));
+      .catch(() => {
+        setBackendError(
+          "Live updates are temporarily unavailable. Showing saved community content.",
+        );
+        notify("Using the offline community feed");
+      })
+      .finally(() => setLoadingFeed(false));
+  }, []);
+
+  useEffect(() => {
+    let refreshTimer: number | undefined;
+    return subscribeToCommunity(() => {
+      window.clearTimeout(refreshTimer);
+      refreshTimer = window.setTimeout(() => {
+        loadCommunity().then(({ posts: remotePosts, hasMore: more }) => {
+          setPosts([...remotePosts, ...seedPosts]);
+          setHasMore(more);
+          setPage(0);
+        });
+      }, 450);
+    });
   }, []);
 
   useEffect(() => {
@@ -100,6 +154,35 @@ export default function Community() {
       ),
     [posts, filter, search, savedPosts, view],
   );
+  const displayNotices = communityNotices;
+  const unreadNoticeCount = displayNotices.filter((item) => !item.isRead).length;
+
+  async function loadMorePosts() {
+    const nextPage = page + 1;
+    try {
+      const { posts: nextPosts, hasMore: more } = await loadCommunity(nextPage);
+      setPosts((current) => [
+        ...current.filter((post) => !post.id.startsWith("seed-")),
+        ...nextPosts.filter((post) => !current.some((existing) => existing.id === post.id)),
+        ...seedPosts,
+      ]);
+      setPage(nextPage);
+      setHasMore(more);
+    } catch {
+      notify("Could not load more thoughts");
+    }
+  }
+
+  async function deleteAccount() {
+    if (!window.confirm("Delete your SpeakUp account and its content? This cannot be undone."))
+      return;
+    const response = await fetch("/api/account", { method: "DELETE" });
+    if (!response.ok) {
+      notify("Account deletion could not be completed");
+      return;
+    }
+    window.location.href = "/";
+  }
 
   async function publish(e: FormEvent) {
     e.preventDefault();
@@ -380,7 +463,7 @@ export default function Community() {
           </button>
           <button className={view === "notices" ? "active" : ""} onClick={() => setView("notices")}>
             <Icon icon={Notification01Icon} /> <span>Notices</span>
-            {readNotices.size < 3 && <i>{3 - readNotices.size}</i>}
+            {unreadNoticeCount > 0 && <i>{unreadNoticeCount}</i>}
           </button>
           <button className={view === "saved" ? "active" : ""} onClick={() => setView("saved")}>
             <Icon icon={Bookmark02Icon} /> <span>Saved</span>
@@ -513,6 +596,9 @@ export default function Community() {
                 Edit public identity
               </button>
               <GoogleAuthButton />
+              <button className="danger-button" onClick={deleteAccount}>
+                Delete account
+              </button>
             </div>
             <p className="profile-view__privacy">
               Anonymous posts never display this profile name. Your account remains privately
@@ -533,41 +619,45 @@ export default function Community() {
           <section className="notices-view">
             <header>
               <p>Updates from conversations and the SpeakUp community.</p>
-              <button onClick={() => setReadNotices(new Set([1, 2, 3]))}>Mark all as read</button>
-            </header>
-            {[
-              [
-                1,
-                "A new voice joined the conversation",
-                "Someone responded to a reflection you follow.",
-                "12 min",
-              ],
-              [
-                2,
-                "Your thought was carried forward",
-                "A community member shared your SpeakUp card.",
-                "1 hr",
-              ],
-              [
-                3,
-                "Community note",
-                "This week we are exploring faith beyond church walls.",
-                "Today",
-              ],
-            ].map(([id, title, copy, time]) => (
               <button
-                className={`notice-item ${readNotices.has(id as number) ? "read" : ""}`}
-                key={id}
-                onClick={() => setReadNotices((current) => new Set([...current, id as number]))}
+                onClick={() => {
+                  setCommunityNotices((current) =>
+                    current.map((item) => ({ ...item, isRead: true })),
+                  );
+                  markNotificationRead().catch(() => notify("Could not update notices"));
+                }}
+              >
+                Mark all as read
+              </button>
+            </header>
+            {displayNotices.map((item) => (
+              <button
+                className={`notice-item ${item.isRead ? "read" : ""}`}
+                key={item.id}
+                onClick={() => {
+                  setCommunityNotices((current) =>
+                    current.map((noticeItem) =>
+                      noticeItem.id === item.id ? { ...noticeItem, isRead: true } : noticeItem,
+                    ),
+                  );
+                  if (!item.id.startsWith("sample-"))
+                    markNotificationRead(item.id).catch(() => notify("Could not update notice"));
+                }}
               >
                 <span>
-                  <Icon icon={id === 3 ? Notification01Icon : Comment01Icon} />
+                  <Icon icon={item.kind === "community" ? Notification01Icon : Comment01Icon} />
                 </span>
                 <p>
-                  <b>{title}</b>
-                  <small>{copy}</small>
+                  <b>
+                    {item.kind === "comment"
+                      ? "A new voice joined the conversation"
+                      : item.kind === "like"
+                        ? "Your thought was carried forward"
+                        : "Community note"}
+                  </b>
+                  <small>{item.message}</small>
                 </p>
-                <time>{time}</time>
+                <time>{item.time}</time>
               </button>
             ))}
           </section>
@@ -632,9 +722,18 @@ export default function Community() {
                             </button>
                             <button
                               className="report"
-                              onClick={() => {
+                              onClick={async () => {
                                 setOpenMenu(null);
-                                notify("Report received for review");
+                                try {
+                                  const sent = await reportRemotePost(post.id);
+                                  notify(
+                                    sent
+                                      ? "Report received for review"
+                                      : "Sign in to submit reports",
+                                  );
+                                } catch {
+                                  notify("This post has already been reported");
+                                }
                               }}
                             >
                               <Icon icon={Flag01Icon} />
@@ -720,6 +819,17 @@ export default function Community() {
                 : "Try another search or begin the conversation yourself."}
             </p>
           </div>
+        )}
+        {loadingFeed && view !== "profile" && view !== "notices" && (
+          <div className="community-status">Bringing the latest thoughts to light…</div>
+        )}
+        {backendError && (
+          <div className="community-status community-status--error">{backendError}</div>
+        )}
+        {hasMore && view === "feed" && !loadingFeed && (
+          <button className="load-more" onClick={loadMorePosts}>
+            Load more thoughts
+          </button>
         )}
       </section>
 
@@ -894,7 +1004,18 @@ export default function Community() {
                   onChange={(e) => setDisplayName(e.target.value || "Guest seeker")}
                 />
               </label>
-              <button className="community-primary" onClick={() => setIdentityOpen(false)}>
+              <button
+                className="community-primary"
+                onClick={async () => {
+                  setIdentityOpen(false);
+                  try {
+                    const synced = await updateRemoteProfile(displayName);
+                    notify(synced ? "Profile updated" : "Display name saved on this device");
+                  } catch {
+                    notify("Display name saved locally");
+                  }
+                }}
+              >
                 Continue without registering
               </button>
               <div className="divider">

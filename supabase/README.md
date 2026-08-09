@@ -8,3 +8,13 @@
 6. In Supabase URL Configuration, set the site URL and allow `http://localhost:3000/auth/callback` during development.
 
 Anonymous posts still require an authenticated account. `is_anonymous` controls public attribution; the owner remains available for moderation and account-level abuse controls.
+
+## Create the first administrator
+
+After applying `202608090003_admin_moderation.sql`, run this once in the SQL editor using your Google account email:
+
+```sql
+insert into public.user_roles (user_id, role)
+select id, 'admin' from auth.users where email = 'you@example.com'
+on conflict (user_id) do update set role = excluded.role;
+```
