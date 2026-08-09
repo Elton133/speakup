@@ -158,7 +158,7 @@ export default function Home() {
           <span className="hero__mark-wrap">
             <img className="hero__mark" src="/assets/brand/hand-lantern-mark.png" alt="" />
           </span>
-          <span className="light-ray" />
+          {/* <span className="light-ray" /> */}
         </motion.div>
         <div className="scroll-note">
           KEEP SCROLLING{" "}
