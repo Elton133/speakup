@@ -28,6 +28,7 @@ import {
 } from "@hugeicons/core-free-icons";
 import "./community.css";
 import { BrandLogo } from "../components/brand-logo";
+import { GoogleAuthButton } from "../components/google-auth-button";
 import { seedPosts, topics } from "./data";
 import type { Post } from "./types";
 const Icon = ({ icon, size = 19 }: { icon: typeof Home01Icon; size?: number }) => (
@@ -335,9 +336,6 @@ export default function Community() {
 
       <section className="community-main" id="feed">
         <header className="community-topbar">
-          <a className="community-mobile-logo" href="/" aria-label="SpeakUp home">
-            <BrandLogo compact />
-          </a>
           <div>
             <p className="section-label">THE COMMUNITY</p>
             <h1>In the light.</h1>
@@ -695,11 +693,7 @@ export default function Community() {
               <div className="divider">
                 <span>or</span>
               </div>
-              <button className="outline-button">Create a SpeakUp account</button>
-              <small>
-                Account registration will connect your posts across devices when the community
-                backend launches.
-              </small>
+              <GoogleAuthButton />
             </motion.div>
           </div>
         )}

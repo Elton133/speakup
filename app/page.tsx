@@ -64,16 +64,20 @@ export default function Home() {
   useEffect(() => {
     if (reduceMotion || !artRef.current) return;
     const context = gsap.context(() => {
-      gsap.to(".hero__mark-wrap", {
-        y: -13,
-        rotate: -1,
-        duration: 2.8,
-        repeat: -1,
-        yoyo: true,
-        ease: "sine.inOut",
+      const media = gsap.matchMedia();
+      media.add("(min-width: 801px)", () => {
+        gsap.to(".hero__mark-wrap", {
+          y: -13,
+          rotate: -1,
+          duration: 2.8,
+          repeat: -1,
+          yoyo: true,
+          ease: "sine.inOut",
+        });
+        gsap.to(".orbit--one", { rotate: 360, duration: 32, repeat: -1, ease: "none" });
+        gsap.to(".orbit--two", { rotate: -360, duration: 24, repeat: -1, ease: "none" });
       });
-      gsap.to(".orbit--one", { rotate: 360, duration: 32, repeat: -1, ease: "none" });
-      gsap.to(".orbit--two", { rotate: -360, duration: 24, repeat: -1, ease: "none" });
+      return () => media.revert();
     }, artRef);
     return () => context.revert();
   }, [reduceMotion]);

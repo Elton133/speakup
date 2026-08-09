@@ -818,9 +818,7 @@ footer {
     padding: 85px 0 50px;
   }
   .hero__art {
-    height: 420px;
-    margin-top: 10px;
-    transform: scale(0.82);
+    display: none;
   }
   .scroll-note {
     display: none;
@@ -894,11 +892,19 @@ footer {
   }
   .hero__actions {
     align-items: flex-start;
-    flex-direction: column;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    gap: 14px;
   }
-  .hero__art {
-    margin-left: -35px;
-    margin-right: -35px;
+  .hero__actions .button {
+    flex: 0 0 auto;
+    padding: 14px 16px;
+    font-size: 10px;
+  }
+  .hero__actions .text-link {
+    gap: 6px;
+    font-size: 10px;
+    white-space: nowrap;
   }
   .post {
     padding: 25px;
