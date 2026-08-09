@@ -144,6 +144,9 @@
   font-size: 48px;
   line-height: 0.85;
 }
+.community-mobile-logo {
+  display: none;
+}
 .topic-tabs {
   display: flex;
   overflow: auto;
@@ -830,17 +833,28 @@
 @media (max-width: 600px) {
   .community-topbar {
     height: auto;
-    min-height: 110px;
+    min-height: 150px;
     display: grid;
     grid-template-columns: 1fr auto;
     gap: 18px;
     align-items: end;
+  }
+  .community-mobile-logo {
+    display: block;
+    grid-column: 1/-1;
   }
   .community-topbar > div {
     grid-column: 1;
   }
   .community-topbar .mobile-compose {
     grid-column: 2;
+  }
+  .community-topbar .brand-logo {
+    transform: scale(0.72);
+    transform-origin: left center;
+  }
+  .community-sidebar > a {
+    display: none;
   }
 }
 /* ============================== New thought composer */

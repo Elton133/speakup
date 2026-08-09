@@ -336,6 +336,9 @@ export default function Community() {
 
       <section className="community-main" id="feed">
         <header className="community-topbar">
+          <a className="community-mobile-logo" href="/" aria-label="SpeakUp home">
+            <BrandLogo compact />
+          </a>
           <div>
             <p className="section-label">THE COMMUNITY</p>
             <h1>In the light.</h1>
