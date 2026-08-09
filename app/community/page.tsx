@@ -29,6 +29,7 @@ import {
 import "./community.css";
 import { BrandLogo } from "../components/brand-logo";
 import { GoogleAuthButton } from "../components/google-auth-button";
+import { PushNotificationSettings } from "../components/push-notification-settings";
 import { seedPosts, topics } from "./data";
 import type { Post } from "./types";
 import {
@@ -624,6 +625,7 @@ export default function Community() {
               Anonymous posts never display this profile name. Your account remains privately
               attached for safety and moderation.
             </p>
+            <PushNotificationSettings />
           </section>
         )}
 

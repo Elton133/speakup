@@ -78,6 +78,77 @@
 .moderation-tabs button.active {
   border-color: #0b0b0b;
 }
+.announcement-composer {
+  margin: 42px max(5vw, 28px) 10px;
+  padding: 30px;
+  display: grid;
+  grid-template-columns: 1.1fr 1fr 1.4fr;
+  gap: 20px;
+  border: 1px solid #c5c1b8;
+  background: #f3f1eb;
+}
+.announcement-composer > div {
+  grid-column: 1/-1;
+}
+.announcement-composer > div p {
+  color: #77736c;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.18em;
+}
+.announcement-composer h2 {
+  margin: 8px 0;
+  font-family: var(--font-flexing);
+  font-size: 42px;
+}
+.announcement-composer > div span {
+  color: #69665f;
+  font-size: 12px;
+}
+.announcement-composer label {
+  color: #5f5c56;
+  font-size: 9px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+.announcement-composer input,
+.announcement-composer textarea {
+  width: 100%;
+  margin-top: 7px;
+  padding: 13px;
+  border: 1px solid #bbb7ae;
+  background: white;
+  font: 13px var(--font-google-sans-flex);
+  text-transform: none;
+}
+.announcement-composer textarea {
+  min-height: 90px;
+  resize: vertical;
+}
+.announcement-composer footer {
+  grid-column: 1/-1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
+.announcement-composer footer small {
+  color: #706d66;
+}
+.announcement-composer footer button {
+  min-height: 44px;
+  padding: 0 22px;
+  border: 0;
+  background: #0b0b0b;
+  color: white;
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.announcement-composer footer button:disabled {
+  opacity: 0.5;
+}
 .moderation-message,
 .moderation-empty {
   margin: 45px max(5vw, 28px);
@@ -214,6 +285,18 @@
   }
   .moderation-tabs button {
     padding-inline: 16px;
+  }
+  .announcement-composer {
+    grid-template-columns: 1fr;
+    padding: 22px;
+  }
+  .announcement-composer > div,
+  .announcement-composer footer {
+    grid-column: 1;
+  }
+  .announcement-composer footer {
+    align-items: stretch;
+    flex-direction: column;
   }
   .report-context {
     align-items: flex-start;

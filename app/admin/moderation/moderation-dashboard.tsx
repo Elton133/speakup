@@ -28,6 +28,13 @@ export function ModerationDashboard({ email }: { email: string }) {
   const [error, setError] = useState("");
   const [working, setWorking] = useState<string | null>(null);
   const [notes, setNotes] = useState<Record<string, string>>({});
+  const [announcement, setAnnouncement] = useState({
+    title: "",
+    message: "",
+    url: "/community?view=notices",
+  });
+  const [sendingAnnouncement, setSendingAnnouncement] = useState(false);
+  const [announcementResult, setAnnouncementResult] = useState("");
 
   const loadReports = useCallback(async () => {
     setLoading(true);
@@ -55,6 +62,25 @@ export function ModerationDashboard({ email }: { email: string }) {
     if (!response.ok) setError(payload.error || "Moderation action failed");
     else await loadReports();
     setWorking(null);
+  }
+
+  async function sendAnnouncement(event: React.FormEvent) {
+    event.preventDefault();
+    setSendingAnnouncement(true);
+    setAnnouncementResult("");
+    const response = await fetch("/api/admin/notifications", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(announcement),
+    });
+    const payload = await response.json();
+    setAnnouncementResult(
+      response.ok
+        ? `Sent in-app to ${payload.recipients} members and pushed to ${payload.pushed} devices.`
+        : payload.error || "The announcement could not be sent.",
+    );
+    if (response.ok) setAnnouncement({ title: "", message: "", url: "/community?view=notices" });
+    setSendingAnnouncement(false);
   }
 
   return (
@@ -90,6 +116,59 @@ export function ModerationDashboard({ email }: { email: string }) {
           </button>
         ))}
       </nav>
+      <form className="announcement-composer" onSubmit={sendAnnouncement}>
+        <div>
+          <p>COMMUNITY BROADCAST</p>
+          <h2>Send a notification.</h2>
+          <span>
+            This creates an in-app notice for every member and a push notification for subscribed
+            devices.
+          </span>
+        </div>
+        <label>
+          Title
+          <input
+            required
+            maxLength={80}
+            value={announcement.title}
+            onChange={(event) =>
+              setAnnouncement((current) => ({ ...current, title: event.target.value }))
+            }
+            placeholder="This week in the light"
+          />
+        </label>
+        <label>
+          Message
+          <textarea
+            required
+            maxLength={240}
+            value={announcement.message}
+            onChange={(event) =>
+              setAnnouncement((current) => ({ ...current, message: event.target.value }))
+            }
+            placeholder="Write a clear, timely community update…"
+          />
+        </label>
+        <label>
+          Destination
+          <input
+            required
+            value={announcement.url}
+            onChange={(event) =>
+              setAnnouncement((current) => ({ ...current, url: event.target.value }))
+            }
+            placeholder="/community?view=notices"
+          />
+        </label>
+        <footer>
+          <small>
+            {announcement.message.length} / 240 {announcementResult && `· ${announcementResult}`}
+          </small>
+          <button disabled={sendingAnnouncement}>
+            {sendingAnnouncement ? "Sending…" : "Send notification"}
+          </button>
+        </footer>
+      </form>
       {error && <div className="moderation-message error">{error}</div>}
       {loading ? (
         <div className="moderation-message">Loading reports…</div>

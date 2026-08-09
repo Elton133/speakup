@@ -24,6 +24,16 @@ export const metadata: Metadata = {
   title: "SpeakUp — Truth, Unscripted",
   description:
     "A thoughtful Christian community for truth, honest questions, and carrying the light beyond church walls.",
+  applicationName: "SpeakUp",
+  appleWebApp: {
+    capable: true,
+    title: "SpeakUp",
+    statusBarStyle: "black-translucent",
+  },
+  formatDetection: { telephone: false },
+  icons: {
+    apple: [{ url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" }],
+  },
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

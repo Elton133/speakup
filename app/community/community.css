@@ -1273,6 +1273,29 @@
   color: #66645f;
   line-height: 1.6;
 }
+.push-settings {
+  margin: 0 36px 34px;
+  padding: 22px 0 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  border-top: 1px solid #d2cfc7;
+}
+.push-settings b,
+.push-settings p,
+.push-settings small {
+  display: block;
+}
+.push-settings p {
+  margin-top: 5px;
+  color: #66645f;
+  font-size: 12px;
+}
+.push-settings small {
+  margin-top: 7px;
+  color: #8b493f;
+}
 .profile-view__stats {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -1381,5 +1404,10 @@
   }
   .profile-view__privacy {
     padding: 8px 22px 28px;
+  }
+  .push-settings {
+    margin-inline: 22px;
+    align-items: stretch;
+    flex-direction: column;
   }
 }
