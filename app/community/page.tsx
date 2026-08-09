@@ -107,7 +107,11 @@ export default function Community() {
   useEffect(() => {
     Promise.all([loadCommunity(), loadNotifications()])
       .then(([{ posts: remotePosts, saved, user, hasMore: more }, notices]) => {
-        if (remotePosts.length) setPosts([...remotePosts, ...seedPosts]);
+        if (remotePosts.length)
+          setPosts((current) => [
+            ...remotePosts,
+            ...current.filter((post) => post.id.startsWith("seed-")),
+          ]);
         if (saved.length) setSavedPosts((current) => new Set([...current, ...saved]));
         if (user)
           setDisplayName(user.user_metadata.full_name || user.email?.split("@")[0] || "Member");
@@ -129,7 +133,10 @@ export default function Community() {
       window.clearTimeout(refreshTimer);
       refreshTimer = window.setTimeout(() => {
         loadCommunity().then(({ posts: remotePosts, hasMore: more }) => {
-          setPosts([...remotePosts, ...seedPosts]);
+          setPosts((current) => [
+            ...remotePosts,
+            ...current.filter((post) => post.id.startsWith("seed-")),
+          ]);
           setHasMore(more);
           setPage(0);
         });
@@ -236,9 +243,27 @@ export default function Community() {
     );
     try {
       const synced = await setRemoteLike(id, nextLiked);
-      if (!synced && !id.startsWith("seed-")) notify("Sign in to sync likes across devices");
+      if (!synced && !id.startsWith("seed-")) {
+        setPosts((current) =>
+          current.map((item) =>
+            item.id === id
+              ? {
+                  ...item,
+                  liked: post.liked,
+                  likes: post.likes,
+                }
+              : item,
+          ),
+        );
+        notify("Sign in to like community posts");
+      }
     } catch {
-      notify("Like saved locally");
+      setPosts((current) =>
+        current.map((item) =>
+          item.id === id ? { ...item, liked: post.liked, likes: post.likes } : item,
+        ),
+      );
+      notify("The like could not be saved. Please try again.");
     }
   }
   function notify(message: string) {
@@ -303,9 +328,25 @@ export default function Community() {
               : post,
           ),
         );
-      else if (!id.startsWith("seed-")) notify("Sign in to sync comments across devices");
+      else if (!id.startsWith("seed-")) {
+        setPosts((current) =>
+          current.map((post) =>
+            post.id === id
+              ? { ...post, comments: post.comments.filter((item) => item.id !== localId) }
+              : post,
+          ),
+        );
+        notify("Sign in to comment on community posts");
+      }
     } catch {
-      notify("Comment saved locally");
+      setPosts((current) =>
+        current.map((post) =>
+          post.id === id
+            ? { ...post, comments: post.comments.filter((item) => item.id !== localId) }
+            : post,
+        ),
+      );
+      notify("The comment could not be saved. Please try again.");
     }
   }
   function wrapText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number) {
