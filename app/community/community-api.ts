@@ -172,7 +172,12 @@ export async function updateRemoteProfile(displayName: string) {
   return true;
 }
 
-export async function createRemotePost(input: { topic: string; body: string; anonymous: boolean }) {
+export async function createRemotePost(input: {
+  topic: string;
+  body: string;
+  quote?: string;
+  anonymous: boolean;
+}) {
   const supabase = createClient();
   const { data } = await supabase.auth.getUser();
   if (!data.user) return null;
@@ -182,6 +187,7 @@ export async function createRemotePost(input: { topic: string; body: string; ano
       author_id: data.user.id,
       topic: input.topic,
       body: input.body,
+      quote: input.quote || null,
       is_anonymous: input.anonymous,
     })
     .select("id")

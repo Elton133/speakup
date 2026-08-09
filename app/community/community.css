@@ -1051,18 +1051,42 @@
   font-size: 9px;
   color: #7c7a7a;
 }
-.compose-modal textarea {
+.compose-fields {
+  margin-top: 18px;
+  border-top: 1px solid #d2cfc7;
+}
+.compose-fields label,
+.compose-fields label > span {
+  display: block;
+}
+.compose-fields label > span {
+  padding: 18px 34px 0;
+  color: #77746d;
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+}
+.compose-fields textarea {
+  width: 100%;
   margin: 0;
-  padding: 24px 34px 30px;
-  min-height: 180px;
+  padding: 12px 34px 24px;
   border-top: 0;
   border-bottom: 1px solid #d2cfc7;
-  font-size: 30px;
-  line-height: 1.25;
   resize: none;
 }
-.compose-modal textarea::placeholder {
+.compose-fields textarea::placeholder {
   color: #a3a098;
+}
+.compose-fields .compose-main {
+  min-height: 115px;
+  font-family: var(--font-flexing);
+  font-size: 32px;
+  line-height: 1.08;
+}
+.compose-fields .compose-context {
+  min-height: 110px;
+  font-size: 15px;
+  line-height: 1.55;
 }
 .compose-options {
   padding: 22px 34px;
@@ -1133,6 +1157,15 @@
   }
   .compose-author {
     margin: 20px 24px 0;
+  }
+  .compose-fields label > span {
+    padding-inline: 24px;
+  }
+  .compose-fields textarea {
+    padding-inline: 24px;
+  }
+  .compose-fields .compose-main {
+    font-size: 27px;
   }
   .compose-modal textarea {
     padding: 22px 24px;

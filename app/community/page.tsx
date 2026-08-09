@@ -55,6 +55,7 @@ export default function Community() {
   const [filter, setFilter] = useState("For you");
   const [composer, setComposer] = useState(false);
   const [anonymous, setAnonymous] = useState(false);
+  const [mainText, setMainText] = useState("");
   const [body, setBody] = useState("");
   const [topic, setTopic] = useState("Reflection");
   const [openComments, setOpenComments] = useState<string | null>(null);
@@ -136,7 +137,9 @@ export default function Community() {
           (filter === "For you" ||
             p.topic === filter ||
             (filter === "Questions" && p.topic === "Question")) &&
-          `${p.body} ${p.author} ${p.topic}`.toLowerCase().includes(search.toLowerCase()),
+          `${p.quote || ""} ${p.body} ${p.author} ${p.topic}`
+            .toLowerCase()
+            .includes(search.toLowerCase()),
       ),
     [posts, filter, search, savedPosts, view],
   );
@@ -172,7 +175,11 @@ export default function Community() {
 
   async function publish(e: FormEvent) {
     e.preventDefault();
-    if (!body.trim()) return;
+    const featured = mainText.trim();
+    const supporting = body.trim();
+    if (!featured && !supporting) return;
+    const postBody = supporting || featured;
+    const postQuote = featured && supporting ? featured : undefined;
     const name = anonymous ? "Anonymous" : displayName;
     const localId = crypto.randomUUID();
     const newPost: Post = {
@@ -190,16 +197,23 @@ export default function Community() {
       anonymous,
       time: "now",
       topic,
-      body: body.trim(),
+      body: postBody,
+      quote: postQuote,
       likes: 0,
       ownedByMe: true,
       comments: [],
     };
     setPosts([newPost, ...posts]);
+    setMainText("");
     setBody("");
     setComposer(false);
     try {
-      const remoteId = await createRemotePost({ topic, body: newPost.body, anonymous });
+      const remoteId = await createRemotePost({
+        topic,
+        body: newPost.body,
+        quote: newPost.quote,
+        anonymous,
+      });
       if (remoteId) {
         setPosts((current) =>
           current.map((post) => (post.id === localId ? { ...post, id: remoteId } : post)),
@@ -955,14 +969,29 @@ export default function Community() {
                   </small>
                 </p>
               </div>
-              <textarea
-                autoFocus
-                value={body}
-                onChange={(e) => setBody(e.target.value)}
-                maxLength={1200}
-                placeholder="What truth are you bringing to light?"
-                aria-label="Post content"
-              />
+              <div className="compose-fields">
+                <label>
+                  <span>MAIN THOUGHT</span>
+                  <textarea
+                    className="compose-main"
+                    autoFocus
+                    value={mainText}
+                    onChange={(e) => setMainText(e.target.value)}
+                    maxLength={800}
+                    placeholder="What truth are you bringing to light?"
+                  />
+                </label>
+                <label>
+                  <span>SUPPORTING CONTEXT</span>
+                  <textarea
+                    className="compose-context"
+                    value={body}
+                    onChange={(e) => setBody(e.target.value)}
+                    maxLength={1200}
+                    placeholder="Add the context, question, or reflection beneath it…"
+                  />
+                </label>
+              </div>
               <div className="compose-options">
                 <div className="compose-topics">
                   <p>CHOOSE A SPACE</p>
@@ -998,9 +1027,13 @@ export default function Community() {
               </div>
               <footer>
                 <small>
-                  <b>{body.length}</b> / 1200 characters
+                  <b>{mainText.length + body.length}</b> / 2000 characters
                 </small>
-                <button className="community-primary" disabled={!body.trim()} type="submit">
+                <button
+                  className="community-primary"
+                  disabled={!mainText.trim() && !body.trim()}
+                  type="submit"
+                >
                   Publish thought <Icon icon={SentIcon} />
                 </button>
               </footer>
