@@ -1030,15 +1030,18 @@ export default function Community() {
                 Display name
                 <input
                   value={displayName}
-                  onChange={(e) => setDisplayName(e.target.value || "Guest seeker")}
+                  onChange={(e) => setDisplayName(e.target.value)}
+                  maxLength={50}
                 />
               </label>
               <button
                 className="community-primary"
                 onClick={async () => {
+                  const nextDisplayName = displayName.trim() || "Guest seeker";
+                  setDisplayName(nextDisplayName);
                   setIdentityOpen(false);
                   try {
-                    const synced = await updateRemoteProfile(displayName);
+                    const synced = await updateRemoteProfile(nextDisplayName);
                     notify(synced ? "Profile updated" : "Display name saved on this device");
                   } catch {
                     notify("Display name saved locally");
