@@ -1108,3 +1108,114 @@
     white-space: nowrap;
   }
 }
+
+/* ============================== Saved & profile views */
+.profile-view {
+  margin: 28px 36px 70px;
+  border: 1px solid #cbc8c0;
+  background: #f2f0ea;
+}
+.profile-view__identity {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  padding: 38px;
+  border-bottom: 1px solid #d2cfc7;
+}
+.profile-view__avatar {
+  width: 92px;
+  height: 92px;
+  flex: 0 0 92px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: #0b0b0b;
+  color: #fff;
+  font-family: var(--font-flexing);
+  font-size: 32px;
+}
+.profile-view h2 {
+  margin: 4px 0 8px;
+  font-family: var(--font-flexing);
+  font-size: 42px;
+  line-height: 1;
+}
+.profile-view__identity > div > p:last-child,
+.profile-view__privacy {
+  color: #66645f;
+  line-height: 1.6;
+}
+.profile-view__stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  border-bottom: 1px solid #d2cfc7;
+}
+.profile-view__stats article {
+  padding: 28px 36px;
+  border-right: 1px solid #d2cfc7;
+}
+.profile-view__stats article:last-child {
+  border-right: 0;
+}
+.profile-view__stats b,
+.profile-view__stats span {
+  display: block;
+}
+.profile-view__stats b {
+  font-family: var(--font-flexing);
+  font-size: 38px;
+}
+.profile-view__stats span {
+  margin-top: 4px;
+  color: #6c6a66;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.profile-view__actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 30px 36px 12px;
+}
+.profile-view__actions small {
+  display: none;
+}
+.profile-view__privacy {
+  max-width: 680px;
+  padding: 8px 36px 34px;
+  font-size: 12px;
+}
+@media (max-width: 600px) {
+  .profile-view {
+    margin: 18px 20px 90px;
+  }
+  .profile-view__identity {
+    align-items: flex-start;
+    padding: 26px 22px;
+  }
+  .profile-view__avatar {
+    width: 62px;
+    height: 62px;
+    flex-basis: 62px;
+    font-size: 23px;
+  }
+  .profile-view h2 {
+    font-size: 31px;
+  }
+  .profile-view__stats article {
+    padding: 22px 16px;
+  }
+  .profile-view__stats b {
+    font-size: 30px;
+  }
+  .profile-view__actions {
+    align-items: stretch;
+    flex-direction: column;
+    padding: 24px 22px 10px;
+  }
+  .profile-view__privacy {
+    padding: 8px 22px 28px;
+  }
+}
