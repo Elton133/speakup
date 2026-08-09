@@ -822,6 +822,19 @@
   color: #77746e;
   font-size: 10px;
 }
+.notices-empty {
+  padding: 70px 28px;
+  text-align: center;
+}
+.notices-empty h2 {
+  font-family: var(--font-flexing);
+  font-size: 38px;
+}
+.notices-empty p {
+  margin-top: 8px;
+  color: #706d67;
+  font-size: 12px;
+}
 @media (max-width: 600px) {
   .community-sidebar nav a,
   .community-sidebar nav button {

@@ -16,5 +16,6 @@ export type Post = {
   quote?: string;
   likes: number;
   liked?: boolean;
+  ownedByMe?: boolean;
   comments: Comment[];
 };

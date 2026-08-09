@@ -92,6 +92,7 @@ export async function loadCommunity(
         quote: row.quote || undefined,
         likes: row.post_likes.length,
         liked: Boolean(user && row.post_likes.some((like) => like.user_id === user.id)),
+        ownedByMe: Boolean(user && row.author_id === user.id),
         comments: row.comments.map((comment) => ({
           id: comment.id,
           author: comment.is_anonymous ? "Anonymous" : comment.profiles?.display_name || "Member",

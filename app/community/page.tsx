@@ -67,29 +67,7 @@ export default function Community() {
   const [savedPosts, setSavedPosts] = useState<Set<string>>(new Set());
   const [savedReady, setSavedReady] = useState(false);
   const [notice, setNotice] = useState("");
-  const [communityNotices, setCommunityNotices] = useState<CommunityNotice[]>([
-    {
-      id: "sample-1",
-      kind: "comment",
-      message: "Someone responded to a reflection you follow.",
-      isRead: false,
-      time: "12 min",
-    },
-    {
-      id: "sample-2",
-      kind: "like",
-      message: "A community member shared your SpeakUp card.",
-      isRead: false,
-      time: "1 hr",
-    },
-    {
-      id: "sample-3",
-      kind: "community",
-      message: "This week we are exploring faith beyond church walls.",
-      isRead: false,
-      time: "Today",
-    },
-  ]);
+  const [communityNotices, setCommunityNotices] = useState<CommunityNotice[]>([]);
   const [loadingFeed, setLoadingFeed] = useState(true);
   const [backendError, setBackendError] = useState("");
   const [page, setPage] = useState(0);
@@ -213,6 +191,7 @@ export default function Community() {
       topic,
       body: body.trim(),
       likes: 0,
+      ownedByMe: true,
       comments: [],
     };
     setPosts([newPost, ...posts]);
@@ -681,8 +660,7 @@ export default function Community() {
                       noticeItem.id === item.id ? { ...noticeItem, isRead: true } : noticeItem,
                     ),
                   );
-                  if (!item.id.startsWith("sample-"))
-                    markNotificationRead(item.id).catch(() => notify("Could not update notice"));
+                  markNotificationRead(item.id).catch(() => notify("Could not update notice"));
                 }}
               >
                 <span>
@@ -701,6 +679,12 @@ export default function Community() {
                 <time>{item.time}</time>
               </button>
             ))}
+            {!displayNotices.length && (
+              <div className="notices-empty">
+                <h2>No notices yet.</h2>
+                <p>Replies, likes, and community updates will appear here.</p>
+              </div>
+            )}
           </section>
         )}
 
@@ -757,29 +741,33 @@ export default function Community() {
                               <Icon icon={savedPosts.has(post.id) ? Tick02Icon : Bookmark02Icon} />
                               {savedPosts.has(post.id) ? "Saved" : "Save for later"}
                             </button>
-                            <button onClick={() => hidePost(post.id)}>
-                              <Icon icon={EyeOffIcon} />
-                              Hide from my feed
-                            </button>
-                            <button
-                              className="report"
-                              onClick={async () => {
-                                setOpenMenu(null);
-                                try {
-                                  const sent = await reportRemotePost(post.id);
-                                  notify(
-                                    sent
-                                      ? "Report received for review"
-                                      : "Sign in to submit reports",
-                                  );
-                                } catch {
-                                  notify("This post has already been reported");
-                                }
-                              }}
-                            >
-                              <Icon icon={Flag01Icon} />
-                              Report post
-                            </button>
+                            {!post.ownedByMe && (
+                              <>
+                                <button onClick={() => hidePost(post.id)}>
+                                  <Icon icon={EyeOffIcon} />
+                                  Hide from my feed
+                                </button>
+                                <button
+                                  className="report"
+                                  onClick={async () => {
+                                    setOpenMenu(null);
+                                    try {
+                                      const sent = await reportRemotePost(post.id);
+                                      notify(
+                                        sent
+                                          ? "Report received for review"
+                                          : "Sign in to submit reports",
+                                      );
+                                    } catch {
+                                      notify("This post has already been reported");
+                                    }
+                                  }}
+                                >
+                                  <Icon icon={Flag01Icon} />
+                                  Report post
+                                </button>
+                              </>
+                            )}
                           </motion.div>
                         )}
                       </AnimatePresence>
