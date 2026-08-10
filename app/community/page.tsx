@@ -66,7 +66,8 @@ export default function Community() {
   const [openComments, setOpenComments] = useState<string | null>(null);
   const [comment, setComment] = useState("");
   const [sharePost, setSharePost] = useState<Post | null>(null);
-  const [shareCardUrl, setShareCardUrl] = useState<string | null>(null);
+  const [shareCards, setShareCards] = useState<Array<{ url: string; blob: Blob }>>([]);
+  const [shareCardIndex, setShareCardIndex] = useState(0);
   const [identityOpen, setIdentityOpen] = useState(false);
   const [displayName, setDisplayName] = useState("Guest seeker");
   const [search, setSearch] = useState("");
@@ -93,26 +94,31 @@ export default function Community() {
 
   useEffect(() => {
     Promise.all([loadCommunity(), loadNotifications()])
-      .then(([{ posts: remotePosts, saved, user, displayName: profileName, hasMore: more }, notices]) => {
-        if (remotePosts.length)
-          setPosts((current) => [
-            ...remotePosts,
-            ...current.filter((post) => post.id.startsWith("seed-")),
-          ]);
-        if (saved.length) setSavedPosts((current) => new Set([...current, ...saved]));
-        if (user) {
-          const isAnonymousUser = Boolean(user.is_anonymous);
-          setAnonymous(isAnonymousUser);
-          setDisplayName(
-            profileName ||
-              user.user_metadata.full_name ||
-              user.email?.split("@")[0] ||
-              "Guest seeker",
-          );
-        }
-        if (notices.length) setCommunityNotices(notices);
-        setHasMore(more);
-      })
+      .then(
+        ([
+          { posts: remotePosts, saved, user, displayName: profileName, hasMore: more },
+          notices,
+        ]) => {
+          if (remotePosts.length)
+            setPosts((current) => [
+              ...remotePosts,
+              ...current.filter((post) => post.id.startsWith("seed-")),
+            ]);
+          if (saved.length) setSavedPosts((current) => new Set([...current, ...saved]));
+          if (user) {
+            const isAnonymousUser = Boolean(user.is_anonymous);
+            setAnonymous(isAnonymousUser);
+            setDisplayName(
+              profileName ||
+                user.user_metadata.full_name ||
+                user.email?.split("@")[0] ||
+                "Guest seeker",
+            );
+          }
+          if (notices.length) setCommunityNotices(notices);
+          setHasMore(more);
+        },
+      )
       .catch(() => {
         setBackendError(
           "Live updates are temporarily unavailable. Showing saved community content.",
@@ -477,12 +483,33 @@ export default function Community() {
     if (line) lines.push(line);
     return lines;
   }
-  async function createShareCard(post: Post) {
+  function splitShareText(text: string, limit: number) {
+    const words = text.trim().split(/\s+/).filter(Boolean);
+    const chunks: string[] = [];
+    let chunk = "";
+    for (const word of words) {
+      const next = chunk ? `${chunk} ${word}` : word;
+      if (next.length > limit && chunk) {
+        const sentenceBreak = Math.max(
+          chunk.lastIndexOf(". "),
+          chunk.lastIndexOf("? "),
+          chunk.lastIndexOf("! "),
+          chunk.lastIndexOf("; "),
+        );
+        if (sentenceBreak > limit * 0.48) {
+          chunks.push(chunk.slice(0, sentenceBreak + 1).trim());
+          chunk = `${chunk.slice(sentenceBreak + 1).trim()} ${word}`.trim();
+        } else {
+          chunks.push(chunk);
+          chunk = word;
+        }
+      } else chunk = next;
+    }
+    if (chunk) chunks.push(chunk);
+    return chunks;
+  }
+  async function createShareCards(post: Post) {
     await document.fonts.ready;
-    const canvas = document.createElement("canvas");
-    canvas.width = 1080;
-    canvas.height = 1080;
-    const ctx = canvas.getContext("2d")!;
     const styles = getComputedStyle(document.documentElement);
     const flexing = styles.getPropertyValue("--font-flexing").trim() || "serif";
     const sans = styles.getPropertyValue("--font-google-sans-flex").trim() || "Arial";
@@ -493,108 +520,146 @@ export default function Community() {
         image.onerror = reject;
         image.src = src;
       });
-    const variant =
+    const baseVariant =
       [...post.id].reduce((total, character) => total + character.charCodeAt(0), 0) % 5;
+    const mainChunks = splitShareText(post.quote || post.body, post.quote ? 250 : 330);
+    const supportingChunks = post.quote ? splitShareText(post.body, 300) : [];
+    const pages: Array<{ main?: string; supporting?: string }> = mainChunks.map((main) => ({
+      main,
+    }));
+    if (supportingChunks.length) {
+      pages[0].supporting = supportingChunks.shift();
+      pages.push(...supportingChunks.map((supporting) => ({ supporting })));
+    }
+    const mark = await loadImage("/assets/brand/hand-lantern-mark.png");
     const palette = [
       { bg: "#ffffff", fg: "#0b0b0b" },
       { bg: "#dedbd2", fg: "#0b0b0b" },
       { bg: "#494949", fg: "#ffffff" },
       { bg: "#0b0b0b", fg: "#ffffff" },
     ];
-    const photo = variant === 1;
-    let light = photo ? "#ffffff" : palette[variant === 0 ? 3 : variant - 2]?.fg || "#0b0b0b";
-    if (photo) {
-      const hero = await loadImage("/assets/brand/carry-the-light.png");
-      const scale = Math.max(1080 / hero.width, 1080 / hero.height);
-      const width = hero.width * scale,
-        height = hero.height * scale;
-      ctx.drawImage(hero, (1080 - width) / 2, (1080 - height) / 2, width, height);
-      const shade = ctx.createLinearGradient(0, 0, 0, 1080);
-      shade.addColorStop(0, "rgba(0,0,0,.28)");
-      shade.addColorStop(0.55, "rgba(0,0,0,.5)");
-      shade.addColorStop(1, "rgba(0,0,0,.88)");
-      ctx.fillStyle = shade;
-      ctx.fillRect(0, 0, 1080, 1080);
-    } else {
-      const theme = variant === 0 ? palette[3] : palette[variant - 2] || palette[0];
-      ctx.fillStyle = theme.bg;
-      ctx.fillRect(0, 0, 1080, 1080);
-      light = theme.fg;
-      ctx.strokeStyle = light === "#ffffff" ? "rgba(255,255,255,.16)" : "rgba(11,11,11,.13)";
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.arc(870, 185, 235, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.arc(870, 185, 165, 0, Math.PI * 2);
-      ctx.stroke();
-    }
-    ctx.fillStyle = light;
-    ctx.font = `700 24px ${sans}`;
-    ctx.fillText(`0${Math.min(9, variant + 1)}  /  ${post.topic.toUpperCase()}`, 74, 90);
-    const content = post.quote || post.body;
-    ctx.font = `400 ${content.length > 180 ? 54 : 66}px ${flexing}`;
-    const lines = wrapText(ctx, `“${content}”`, 900).slice(0, content.length > 180 ? 8 : 7);
-    lines.forEach((line, i) => ctx.fillText(line, 74, 205 + i * (content.length > 180 ? 63 : 76)));
-    const showSubtext =
-      Boolean(post.quote) &&
-      content.length < 150 &&
-      post.body.length < 250 &&
-      post.topic.length < 24;
-    if (showSubtext) {
-      ctx.font = `400 25px ${sans}`;
-      ctx.globalAlpha = 0.72;
-      const supporting = wrapText(ctx, post.body, 820).slice(0, 3);
-      supporting.forEach((line, i) => ctx.fillText(line, 74, 720 + i * 35));
-      ctx.globalAlpha = 1;
-    }
-    ctx.strokeStyle = light;
-    ctx.globalAlpha = 0.45;
-    ctx.beginPath();
-    ctx.moveTo(74, 880);
-    ctx.lineTo(1006, 880);
-    ctx.stroke();
-    ctx.globalAlpha = 1;
-    ctx.font = `700 25px ${sans}`;
-    ctx.fillText(post.anonymous ? "ANONYMOUS" : post.author.toUpperCase(), 74, 933);
-    ctx.font = `400 20px ${sans}`;
-    ctx.globalAlpha = 0.65;
-    ctx.fillText("TRUTH, UNSCRIPTED.", 74, 970);
-    ctx.globalAlpha = 1;
-    ctx.font = `700 38px ${flexing}`;
-    ctx.fillText("Speak", 790, 928);
-    ctx.font = `700 45px ${flexing}`;
-    ctx.fillText("Up", 790, 964);
-    const mark = await loadImage("/assets/brand/hand-lantern-mark.png");
-    const markHeight = 84;
-    const markWidth = markHeight * (mark.naturalWidth / mark.naturalHeight);
-    ctx.save();
-    ctx.globalAlpha = 0.92;
-    if (light === "#ffffff") ctx.filter = "invert(1)";
-    ctx.shadowColor = light === "#ffffff" ? "rgba(255,255,255,.12)" : "rgba(11,11,11,.12)";
-    ctx.shadowBlur = 10;
-    ctx.shadowOffsetY = 5;
-    ctx.translate(948, 0);
-    ctx.scale(-1, 1);
-    ctx.drawImage(mark, 0, 888, markWidth, markHeight);
-    ctx.restore();
-    return new Promise<{ url: string; blob: Blob }>((resolve) =>
-      canvas.toBlob(
-        (blob) => resolve({ url: URL.createObjectURL(blob!), blob: blob! }),
-        "image/png",
-      ),
+    const hero = await loadImage("/assets/brand/carry-the-light.png");
+    return Promise.all(
+      pages.map(async (page, pageIndex) => {
+        const canvas = document.createElement("canvas");
+        canvas.width = 1080;
+        canvas.height = 1080;
+        const ctx = canvas.getContext("2d")!;
+        const variant = (baseVariant + pageIndex) % 5;
+        const photo = variant === 1;
+        let light = photo ? "#ffffff" : palette[variant === 0 ? 3 : variant - 2]?.fg || "#0b0b0b";
+        if (photo) {
+          const scale = Math.max(1080 / hero.width, 1080 / hero.height);
+          const width = hero.width * scale;
+          const height = hero.height * scale;
+          ctx.drawImage(hero, (1080 - width) / 2, (1080 - height) / 2, width, height);
+          const shade = ctx.createLinearGradient(0, 0, 0, 1080);
+          shade.addColorStop(0, "rgba(0,0,0,.3)");
+          shade.addColorStop(0.55, "rgba(0,0,0,.56)");
+          shade.addColorStop(1, "rgba(0,0,0,.9)");
+          ctx.fillStyle = shade;
+          ctx.fillRect(0, 0, 1080, 1080);
+        } else {
+          const theme = variant === 0 ? palette[3] : palette[variant - 2] || palette[0];
+          ctx.fillStyle = theme.bg;
+          ctx.fillRect(0, 0, 1080, 1080);
+          light = theme.fg;
+          ctx.strokeStyle = light === "#ffffff" ? "rgba(255,255,255,.16)" : "rgba(11,11,11,.13)";
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.arc(870, 185, 235, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.beginPath();
+          ctx.arc(870, 185, 165, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+        ctx.fillStyle = light;
+        ctx.font = `700 24px ${sans}`;
+        ctx.fillText(`0${pageIndex + 1}  /  ${post.topic.toUpperCase()}`, 74, 90);
+        ctx.textBaseline = "alphabetic";
+        let contentBottom = 170;
+        if (page.main) {
+          const fontSize = page.main.length > 230 ? 49 : page.main.length > 150 ? 55 : 66;
+          const lineHeight = fontSize * 1.16;
+          ctx.font = `400 ${fontSize}px ${flexing}`;
+          const lines = wrapText(ctx, `“${page.main}”`, 900).slice(0, 9);
+          lines.forEach((line, index) => ctx.fillText(line, 74, 190 + index * lineHeight));
+          contentBottom = 190 + lines.length * lineHeight;
+        }
+        if (page.supporting) {
+          const startY = page.main ? Math.max(570, contentBottom + 28) : 205;
+          ctx.font = `450 34px ${sans}`;
+          ctx.globalAlpha = 0.86;
+          const supporting = wrapText(ctx, page.supporting, 900).slice(0, page.main ? 7 : 15);
+          supporting.forEach((line, index) => ctx.fillText(line, 74, startY + index * 47));
+          ctx.globalAlpha = 1;
+        }
+        ctx.font = `700 19px ${sans}`;
+        ctx.globalAlpha = 0.66;
+        ctx.fillText(`${pageIndex + 1} / ${pages.length}`, 930, 90);
+        ctx.globalAlpha = 1;
+        ctx.strokeStyle = light;
+        ctx.globalAlpha = 0.45;
+        ctx.beginPath();
+        ctx.moveTo(74, 880);
+        ctx.lineTo(1006, 880);
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+        ctx.font = `700 25px ${sans}`;
+        ctx.fillText(post.anonymous ? "ANONYMOUS" : post.author.toUpperCase(), 74, 933);
+        ctx.font = `400 20px ${sans}`;
+        ctx.globalAlpha = 0.65;
+        ctx.fillText("TRUTH, UNSCRIPTED.", 74, 970);
+        ctx.globalAlpha = 1;
+        ctx.font = `700 38px ${flexing}`;
+        ctx.fillText("Speak", 790, 928);
+        ctx.font = `700 45px ${flexing}`;
+        ctx.fillText("Up", 790, 964);
+        const markHeight = 84;
+        const markWidth = markHeight * (mark.naturalWidth / mark.naturalHeight);
+        ctx.save();
+        ctx.globalAlpha = 0.92;
+        if (light === "#ffffff") ctx.filter = "invert(1)";
+        ctx.translate(948, 0);
+        ctx.scale(-1, 1);
+        ctx.drawImage(mark, 0, 888, markWidth, markHeight);
+        ctx.restore();
+        return new Promise<{ url: string; blob: Blob }>((resolve) =>
+          canvas.toBlob(
+            (blob) => resolve({ url: URL.createObjectURL(blob!), blob: blob! }),
+            "image/png",
+          ),
+        );
+      }),
     );
   }
   async function nativeShare(post: Post) {
     setSharePost(post);
-    const card = await createShareCard(post);
-    setShareCardUrl(card.url);
+    setShareCardIndex(0);
+    setShareCards(await createShareCards(post));
   }
   async function shareViaDevice(post: Post) {
-    const card = await createShareCard(post);
-    const file = new File([card.blob], `speakup-${post.id}.png`, { type: "image/png" });
-    if (navigator.share && navigator.canShare?.({ files: [file] }))
-      await navigator.share({ title: "A thought from SpeakUp", text: post.body, files: [file] });
+    const cards = await createShareCards(post);
+    const files = cards.map(
+      (card, index) =>
+        new File([card.blob], `speakup-${post.id}-${index + 1}.png`, { type: "image/png" }),
+    );
+    if (navigator.share && navigator.canShare?.({ files }))
+      await navigator.share({ title: "A thought from SpeakUp", text: post.body, files });
+  }
+  function closeShare() {
+    shareCards.forEach((card) => URL.revokeObjectURL(card.url));
+    setSharePost(null);
+    setShareCards([]);
+    setShareCardIndex(0);
+  }
+  function downloadShareCards(post: Post) {
+    shareCards.forEach((card, index) => {
+      const link = document.createElement("a");
+      link.download = `speakup-${post.id}-${index + 1}-of-${shareCards.length}.png`;
+      link.href = card.url;
+      link.click();
+    });
   }
   function copyPost(post: Post) {
     navigator.clipboard.writeText(
@@ -883,10 +948,7 @@ export default function Community() {
                                   <Icon icon={Edit02Icon} />
                                   Edit post
                                 </button>
-                                <button
-                                  className="destructive"
-                                  onClick={() => deletePost(post.id)}
-                                >
+                                <button className="destructive" onClick={() => deletePost(post.id)}>
                                   <Icon icon={Delete02Icon} />
                                   Delete post
                                 </button>
@@ -1232,13 +1294,7 @@ export default function Community() {
 
       <AnimatePresence>
         {sharePost && (
-          <div
-            className="modal-wrap"
-            onMouseDown={() => {
-              setSharePost(null);
-              setShareCardUrl(null);
-            }}
-          >
+          <div className="modal-wrap" onMouseDown={closeShare}>
             <motion.div
               className="share-modal share-modal--card"
               onMouseDown={(e) => e.stopPropagation()}
@@ -1246,29 +1302,47 @@ export default function Community() {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 20 }}
             >
-              <button
-                className="modal-close"
-                onClick={() => {
-                  setSharePost(null);
-                  setShareCardUrl(null);
-                }}
-              >
+              <button className="modal-close" onClick={closeShare}>
                 <Icon icon={Cancel01Icon} />
               </button>
               <p className="section-label">SHARE THE LIGHT</p>
               <h2>Carry it further.</h2>
-              {shareCardUrl && (
-                <img
-                  className="share-preview"
-                  src={shareCardUrl}
-                  alt="Branded preview of this SpeakUp post"
-                />
+              {shareCards.length > 0 && (
+                <div className="share-carousel">
+                  <button
+                    type="button"
+                    aria-label="Previous share card"
+                    disabled={shareCardIndex === 0}
+                    onClick={() => setShareCardIndex((index) => Math.max(0, index - 1))}
+                  >
+                    <Icon icon={ArrowLeft01Icon} />
+                  </button>
+                  <img
+                    className="share-preview"
+                    src={shareCards[shareCardIndex].url}
+                    alt={`Branded SpeakUp card ${shareCardIndex + 1} of ${shareCards.length}`}
+                  />
+                  <button
+                    className="share-carousel__next"
+                    type="button"
+                    aria-label="Next share card"
+                    disabled={shareCardIndex === shareCards.length - 1}
+                    onClick={() =>
+                      setShareCardIndex((index) => Math.min(shareCards.length - 1, index + 1))
+                    }
+                  >
+                    <Icon icon={ArrowLeft01Icon} />
+                  </button>
+                  <small>
+                    {shareCardIndex + 1} / {shareCards.length}
+                  </small>
+                </div>
               )}
               <div className="share-grid">
-                <a download={`speakup-${sharePost.id}.png`} href={shareCardUrl || "#"}>
+                <button onClick={() => downloadShareCards(sharePost)} disabled={!shareCards.length}>
                   <Icon icon={Share08Icon} />
-                  Download card
-                </a>
+                  {shareCards.length > 1 ? `Download all ${shareCards.length}` : "Download card"}
+                </button>
                 <a
                   target="_blank"
                   href={`https://twitter.com/intent/tweet?text=${encodeURIComponent(sharePost.body)}&url=${encodeURIComponent(typeof window === "undefined" ? "" : window.location.href)}`}

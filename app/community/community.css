@@ -881,6 +881,51 @@
   margin: 22px auto;
   border: 1px solid #c8c5be;
 }
+.share-carousel {
+  position: relative;
+  width: min(430px, 100%);
+  margin: 22px auto;
+}
+.share-carousel .share-preview {
+  width: 100%;
+  margin: 0;
+}
+.share-carousel > button {
+  position: absolute;
+  z-index: 2;
+  top: 50%;
+  left: 12px;
+  width: 42px;
+  height: 42px;
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  border-radius: 50%;
+  background: rgba(11, 11, 11, 0.72);
+  color: white;
+  display: grid;
+  place-items: center;
+  transform: translateY(-50%);
+  cursor: pointer;
+  backdrop-filter: blur(8px);
+}
+.share-carousel > button.share-carousel__next {
+  right: 12px;
+  left: auto;
+  transform: translateY(-50%) rotate(180deg);
+}
+.share-carousel > button:disabled {
+  opacity: 0.25;
+  cursor: default;
+}
+.share-carousel > small {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  padding: 6px 9px;
+  background: rgba(11, 11, 11, 0.72);
+  color: white;
+  font-size: 9px;
+  letter-spacing: 0.08em;
+}
 .share-modal--card .share-grid {
   grid-template-columns: repeat(5, 1fr);
 }
