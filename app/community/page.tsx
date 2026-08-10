@@ -11,6 +11,8 @@ import {
   Cancel01Icon,
   Comment01Icon,
   Copy01Icon,
+  Delete02Icon,
+  Edit02Icon,
   Facebook01Icon,
   FavouriteIcon,
   Home01Icon,
@@ -35,6 +37,7 @@ import type { Post } from "./types";
 import {
   createRemoteComment,
   createRemotePost,
+  deleteRemotePost,
   loadNotifications,
   loadCommunity,
   markNotificationRead,
@@ -42,6 +45,7 @@ import {
   setRemoteLike,
   setRemoteSaved,
   subscribeToCommunity,
+  updateRemotePost,
   updateRemoteProfile,
   type CommunityNotice,
 } from "./community-api";
@@ -54,6 +58,7 @@ export default function Community() {
   const [posts, setPosts] = useState(seedPosts);
   const [filter, setFilter] = useState("For you");
   const [composer, setComposer] = useState(false);
+  const [editingPostId, setEditingPostId] = useState<string | null>(null);
   const [anonymous, setAnonymous] = useState(false);
   const [mainText, setMainText] = useState("");
   const [body, setBody] = useState("");
@@ -79,6 +84,8 @@ export default function Community() {
     try {
       const saved = JSON.parse(window.localStorage.getItem("speakup-saved-posts") || "[]");
       setSavedPosts(new Set(Array.isArray(saved) ? saved : []));
+      const savedDisplayName = window.localStorage.getItem("speakup-display-name");
+      if (savedDisplayName) setDisplayName(savedDisplayName);
     } finally {
       setSavedReady(true);
     }
@@ -86,15 +93,23 @@ export default function Community() {
 
   useEffect(() => {
     Promise.all([loadCommunity(), loadNotifications()])
-      .then(([{ posts: remotePosts, saved, user, hasMore: more }, notices]) => {
+      .then(([{ posts: remotePosts, saved, user, displayName: profileName, hasMore: more }, notices]) => {
         if (remotePosts.length)
           setPosts((current) => [
             ...remotePosts,
             ...current.filter((post) => post.id.startsWith("seed-")),
           ]);
         if (saved.length) setSavedPosts((current) => new Set([...current, ...saved]));
-        if (user)
-          setDisplayName(user.user_metadata.full_name || user.email?.split("@")[0] || "Member");
+        if (user) {
+          const isAnonymousUser = Boolean(user.is_anonymous);
+          setAnonymous(isAnonymousUser);
+          setDisplayName(
+            profileName ||
+              user.user_metadata.full_name ||
+              user.email?.split("@")[0] ||
+              "Guest seeker",
+          );
+        }
         if (notices.length) setCommunityNotices(notices);
         setHasMore(more);
       })
@@ -180,6 +195,52 @@ export default function Community() {
     if (!featured && !supporting) return;
     const postBody = supporting || featured;
     const postQuote = featured && supporting ? featured : undefined;
+
+    if (editingPostId) {
+      try {
+        const updated = await updateRemotePost(editingPostId, {
+          topic,
+          body: postBody,
+          quote: postQuote,
+          anonymous,
+        });
+        if (!updated) {
+          notify("This post could not be updated");
+          return;
+        }
+        setPosts((current) =>
+          current.map((post) =>
+            post.id === editingPostId
+              ? {
+                  ...post,
+                  topic,
+                  body: postBody,
+                  quote: postQuote,
+                  anonymous: updated.anonymous,
+                  author: updated.anonymous ? "Anonymous" : displayName,
+                  handle: updated.anonymous ? "Identity protected" : post.handle,
+                  initials: updated.anonymous
+                    ? "A"
+                    : displayName
+                        .split(" ")
+                        .map((part) => part[0])
+                        .join("")
+                        .slice(0, 2)
+                        .toUpperCase(),
+                }
+              : post,
+          ),
+        );
+        setEditingPostId(null);
+        setMainText("");
+        setBody("");
+        setComposer(false);
+        notify("Post updated");
+      } catch {
+        notify("The post could not be updated. Please try again.");
+      }
+      return;
+    }
     const name = anonymous ? "Anonymous" : displayName;
     const localId = crypto.randomUUID();
     const newPost: Post = {
@@ -208,21 +269,54 @@ export default function Community() {
     setBody("");
     setComposer(false);
     try {
-      const remoteId = await createRemotePost({
+      const remotePost = await createRemotePost({
         topic,
         body: newPost.body,
         quote: newPost.quote,
         anonymous,
       });
-      if (remoteId) {
+      if (remotePost) {
         setPosts((current) =>
-          current.map((post) => (post.id === localId ? { ...post, id: remoteId } : post)),
+          current.map((post) =>
+            post.id === localId
+              ? {
+                  ...post,
+                  id: remotePost.id,
+                  anonymous: remotePost.anonymous,
+                  author: remotePost.anonymous ? "Anonymous" : post.author,
+                  handle: remotePost.anonymous ? "Identity protected" : post.handle,
+                  initials: remotePost.anonymous ? "A" : post.initials,
+                }
+              : post,
+          ),
         );
         notify("Thought published");
       } else notify("Saved on this device — sign in to publish across devices");
     } catch {
       notify("Saved locally; the community database could not be reached");
     }
+  }
+  function beginPost() {
+    setEditingPostId(null);
+    setMainText("");
+    setBody("");
+    setTopic("Reflection");
+    setComposer(true);
+  }
+  function editPost(post: Post) {
+    setEditingPostId(post.id);
+    setMainText(post.quote || post.body);
+    setBody(post.quote ? post.body : "");
+    setTopic(post.topic);
+    setAnonymous(Boolean(post.anonymous));
+    setOpenMenu(null);
+    setComposer(true);
+  }
+  function closeComposer() {
+    setComposer(false);
+    setEditingPostId(null);
+    setMainText("");
+    setBody("");
   }
   async function like(id: string) {
     const post = posts.find((item) => item.id === id);
@@ -285,6 +379,26 @@ export default function Community() {
     setOpenMenu(null);
     notify("Post hidden from your feed");
   }
+  async function deletePost(id: string) {
+    if (!window.confirm("Delete this post and all its comments? This cannot be undone.")) return;
+    setOpenMenu(null);
+    try {
+      const deleted = await deleteRemotePost(id);
+      if (!deleted) {
+        notify("This post could not be deleted");
+        return;
+      }
+      setPosts((current) => current.filter((post) => post.id !== id));
+      setSavedPosts((current) => {
+        const next = new Set(current);
+        next.delete(id);
+        return next;
+      });
+      notify("Post deleted");
+    } catch {
+      notify("The post could not be deleted. Please try again.");
+    }
+  }
   function copyFromMenu(post: Post) {
     navigator.clipboard.writeText(
       `“${post.body}” — ${post.author} on SpeakUp\n${window.location.href}`,
@@ -308,15 +422,21 @@ export default function Community() {
     );
     setComment("");
     try {
-      const remoteId = await createRemoteComment(id, text);
-      if (remoteId)
+      const remoteComment = await createRemoteComment(id, text);
+      if (remoteComment)
         setPosts((current) =>
           current.map((post) =>
             post.id === id
               ? {
                   ...post,
                   comments: post.comments.map((item) =>
-                    item.id === localId ? { ...item, id: remoteId } : item,
+                    item.id === localId
+                      ? {
+                          ...item,
+                          id: remoteComment.id,
+                          author: remoteComment.anonymous ? "Anonymous" : item.author,
+                        }
+                      : item,
                   ),
                 }
               : post,
@@ -507,7 +627,7 @@ export default function Community() {
             <Icon icon={UserCircleIcon} /> <span>Identity</span>
           </button>
         </nav>
-        <button className="community-primary" onClick={() => setComposer(true)}>
+        <button className="community-primary" onClick={beginPost}>
           <Icon icon={Add01Icon} /> <span>Bring it to light</span>
         </button>
         <button className="identity-chip" onClick={() => setView("profile")}>
@@ -555,7 +675,7 @@ export default function Community() {
                       : "In the light."}
             </h1>
           </div>
-          <button className="mobile-compose" onClick={() => setComposer(true)}>
+          <button className="mobile-compose" onClick={beginPost}>
             <Icon icon={Add01Icon} />
           </button>
         </header>
@@ -575,7 +695,7 @@ export default function Community() {
           </div>
         )}
         {view === "feed" && (
-          <button className="composer-prompt" onClick={() => setComposer(true)}>
+          <button className="composer-prompt" onClick={beginPost}>
             <span>{displayName[0]}</span>
             <p>What truth are you bringing to light?</p>
             <Icon icon={Add01Icon} />
@@ -757,6 +877,21 @@ export default function Community() {
                               <Icon icon={savedPosts.has(post.id) ? Tick02Icon : Bookmark02Icon} />
                               {savedPosts.has(post.id) ? "Saved" : "Save for later"}
                             </button>
+                            {post.ownedByMe && (
+                              <>
+                                <button onClick={() => editPost(post)}>
+                                  <Icon icon={Edit02Icon} />
+                                  Edit post
+                                </button>
+                                <button
+                                  className="destructive"
+                                  onClick={() => deletePost(post.id)}
+                                >
+                                  <Icon icon={Delete02Icon} />
+                                  Delete post
+                                </button>
+                              </>
+                            )}
                             {!post.ownedByMe && (
                               <>
                                 <button onClick={() => hidePost(post.id)}>
@@ -922,7 +1057,7 @@ export default function Community() {
 
       <AnimatePresence>
         {composer && (
-          <div className="modal-wrap" role="presentation" onMouseDown={() => setComposer(false)}>
+          <div className="modal-wrap" role="presentation" onMouseDown={closeComposer}>
             <motion.form
               className="compose-modal"
               onSubmit={publish}
@@ -933,8 +1068,8 @@ export default function Community() {
             >
               <header>
                 <div>
-                  <p className="section-label">NEW THOUGHT</p>
-                  <h2>Bring it to light.</h2>
+                  <p className="section-label">{editingPostId ? "EDIT THOUGHT" : "NEW THOUGHT"}</p>
+                  <h2>{editingPostId ? "Refine your thought." : "Bring it to light."}</h2>
                   <p className="compose-intro">
                     Share what you&apos;re learning, questioning, or seeing more clearly.
                   </p>
@@ -942,7 +1077,7 @@ export default function Community() {
                 <button
                   className="compose-close"
                   type="button"
-                  onClick={() => setComposer(false)}
+                  onClick={closeComposer}
                   aria-label="Close"
                 >
                   <Icon icon={Cancel01Icon} />
@@ -1034,7 +1169,7 @@ export default function Community() {
                   disabled={!mainText.trim() && !body.trim()}
                   type="submit"
                 >
-                  Publish thought <Icon icon={SentIcon} />
+                  {editingPostId ? "Save changes" : "Publish thought"} <Icon icon={SentIcon} />
                 </button>
               </footer>
             </motion.form>
@@ -1074,6 +1209,7 @@ export default function Community() {
                 onClick={async () => {
                   const nextDisplayName = displayName.trim() || "Guest seeker";
                   setDisplayName(nextDisplayName);
+                  window.localStorage.setItem("speakup-display-name", nextDisplayName);
                   setIdentityOpen(false);
                   try {
                     const synced = await updateRemoteProfile(nextDisplayName);

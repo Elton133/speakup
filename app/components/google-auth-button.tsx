@@ -24,16 +24,18 @@ export function GoogleAuthButton() {
     setBusy(true);
     const supabase = createClient();
 
-    if (user) {
+    if (user && !user.is_anonymous) {
       await supabase.auth.signOut();
       setBusy(false);
       return;
     }
 
-    await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: { redirectTo: `${window.location.origin}/auth/callback?next=/community` },
-    });
+    const options = { redirectTo: `${window.location.origin}/auth/callback?next=/community` };
+    if (user?.is_anonymous) {
+      await supabase.auth.linkIdentity({ provider: "google", options });
+    } else {
+      await supabase.auth.signInWithOAuth({ provider: "google", options });
+    }
   }
 
   return (
@@ -43,13 +45,21 @@ export function GoogleAuthButton() {
         disabled={busy || !isSupabaseConfigured}
         onClick={authenticate}
       >
-        {user ? "Sign out" : busy ? "Connecting…" : "Continue with Google"}
+        {busy
+          ? "Connecting…"
+          : user?.is_anonymous
+            ? "Secure with Google"
+            : user
+              ? "Sign out"
+              : "Continue with Google"}
       </button>
       <small>
         {!isSupabaseConfigured
           ? "Add your Supabase keys to enable Google registration."
           : user
-            ? `Signed in as ${user.email}`
+            ? user.is_anonymous
+              ? "Anonymous account — connect Google to keep it across devices."
+              : `Signed in as ${user.email}`
             : "Your Google email is never shown on anonymous posts."}
       </small>
     </>

@@ -38,6 +38,20 @@ function relativeTime(value: string) {
   return `${Math.floor(hours / 24)} d`;
 }
 
+async function ensureCommunityUser() {
+  const supabase = createClient();
+  const { data: current, error: getUserError } = await supabase.auth.getUser();
+  if (getUserError) throw getUserError;
+  if (current.user) return { supabase, user: current.user };
+
+  const { data, error } = await supabase.auth.signInAnonymously({
+    options: { data: { display_name: "Anonymous member" } },
+  });
+  if (error) throw error;
+  if (!data.user) throw new Error("Anonymous session could not be created.");
+  return { supabase, user: data.user };
+}
+
 export type CommunityNotice = {
   id: string;
   kind: "comment" | "like" | "community";
@@ -53,9 +67,11 @@ export async function loadCommunity(
   posts: Post[];
   saved: string[];
   user: User | null;
+  displayName: string | null;
   hasMore: boolean;
 }> {
-  if (!isSupabaseConfigured) return { posts: [], saved: [], user: null, hasMore: false };
+  if (!isSupabaseConfigured)
+    return { posts: [], saved: [], user: null, displayName: null, hasMore: false };
   const supabase = createClient();
   const { data: auth } = await supabase.auth.getUser();
   const user = auth.user;
@@ -69,13 +85,19 @@ export async function loadCommunity(
   if (error) throw error;
 
   let saved: string[] = [];
+  let displayName: string | null = null;
   if (user) {
-    const { data: savedRows } = await supabase.from("saved_posts").select("post_id");
+    const [{ data: savedRows }, { data: profile }] = await Promise.all([
+      supabase.from("saved_posts").select("post_id"),
+      supabase.from("profiles").select("display_name").eq("id", user.id).maybeSingle(),
+    ]);
     saved = savedRows?.map((row) => row.post_id as string) ?? [];
+    displayName = (profile?.display_name as string | undefined) ?? null;
   }
 
   return {
     user,
+    displayName,
     saved,
     hasMore: (data?.length ?? 0) === pageSize,
     posts: ((data ?? []) as unknown as PostRow[]).map((row) => {
@@ -160,14 +182,56 @@ export async function reportRemotePost(postId: string, reason = "other") {
   return true;
 }
 
-export async function updateRemoteProfile(displayName: string) {
+export async function deleteRemotePost(postId: string) {
+  if (postId.startsWith("seed-")) return false;
   const supabase = createClient();
   const { data } = await supabase.auth.getUser();
   if (!data.user) return false;
+
+  const { data: deleted, error } = await supabase
+    .from("posts")
+    .delete()
+    .eq("id", postId)
+    .eq("author_id", data.user.id)
+    .select("id")
+    .maybeSingle();
+  if (error) throw error;
+  return Boolean(deleted);
+}
+
+export async function updateRemotePost(
+  postId: string,
+  input: { topic: string; body: string; quote?: string; anonymous: boolean },
+) {
+  if (postId.startsWith("seed-")) return false;
+  const supabase = createClient();
+  const { data } = await supabase.auth.getUser();
+  if (!data.user) return false;
+  const isAnonymous = Boolean(data.user.is_anonymous || input.anonymous);
+
+  const { data: updated, error } = await supabase
+    .from("posts")
+    .update({
+      topic: input.topic,
+      body: input.body,
+      quote: input.quote || null,
+      is_anonymous: isAnonymous,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", postId)
+    .eq("author_id", data.user.id)
+    .select("id")
+    .maybeSingle();
+  if (error) throw error;
+  return updated ? { anonymous: isAnonymous } : false;
+}
+
+export async function updateRemoteProfile(displayName: string) {
+  const { supabase, user } = await ensureCommunityUser();
   const { error } = await supabase
     .from("profiles")
     .update({ display_name: displayName })
-    .eq("id", data.user.id);
+    .eq("id", user.id);
   if (error) throw error;
   return true;
 }
@@ -178,60 +242,54 @@ export async function createRemotePost(input: {
   quote?: string;
   anonymous: boolean;
 }) {
-  const supabase = createClient();
-  const { data } = await supabase.auth.getUser();
-  if (!data.user) return null;
+  const { supabase, user } = await ensureCommunityUser();
+  const isAnonymous = Boolean(user.is_anonymous || input.anonymous);
   const { data: post, error } = await supabase
     .from("posts")
     .insert({
-      author_id: data.user.id,
+      author_id: user.id,
       topic: input.topic,
       body: input.body,
       quote: input.quote || null,
-      is_anonymous: input.anonymous,
+      is_anonymous: isAnonymous,
     })
     .select("id")
     .single();
   if (error) throw error;
-  return post.id as string;
+  return { id: post.id as string, anonymous: isAnonymous };
 }
 
 export async function setRemoteLike(postId: string, liked: boolean) {
   if (postId.startsWith("seed-")) return false;
-  const supabase = createClient();
-  const { data } = await supabase.auth.getUser();
-  if (!data.user) return false;
+  const { supabase, user } = await ensureCommunityUser();
   const query = supabase.from("post_likes");
   const { error } = liked
-    ? await query.insert({ post_id: postId, user_id: data.user.id })
-    : await query.delete().eq("post_id", postId).eq("user_id", data.user.id);
+    ? await query.insert({ post_id: postId, user_id: user.id })
+    : await query.delete().eq("post_id", postId).eq("user_id", user.id);
   if (error) throw error;
   return true;
 }
 
 export async function setRemoteSaved(postId: string, saved: boolean) {
   if (postId.startsWith("seed-")) return false;
-  const supabase = createClient();
-  const { data } = await supabase.auth.getUser();
-  if (!data.user) return false;
+  const { supabase, user } = await ensureCommunityUser();
   const query = supabase.from("saved_posts");
   const { error } = saved
-    ? await query.insert({ post_id: postId, user_id: data.user.id })
-    : await query.delete().eq("post_id", postId).eq("user_id", data.user.id);
+    ? await query.insert({ post_id: postId, user_id: user.id })
+    : await query.delete().eq("post_id", postId).eq("user_id", user.id);
   if (error) throw error;
   return true;
 }
 
 export async function createRemoteComment(postId: string, body: string) {
   if (postId.startsWith("seed-")) return null;
-  const supabase = createClient();
-  const { data } = await supabase.auth.getUser();
-  if (!data.user) return null;
+  const { supabase, user } = await ensureCommunityUser();
+  const isAnonymous = Boolean(user.is_anonymous);
   const { data: comment, error } = await supabase
     .from("comments")
-    .insert({ post_id: postId, author_id: data.user.id, body })
+    .insert({ post_id: postId, author_id: user.id, body, is_anonymous: isAnonymous })
     .select("id")
     .single();
   if (error) throw error;
-  return comment.id as string;
+  return { id: comment.id as string, anonymous: isAnonymous };
 }

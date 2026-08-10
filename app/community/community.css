@@ -1234,7 +1234,8 @@
 .post-menu button:hover {
   background: #e7e4dc;
 }
-.post-menu button.report {
+.post-menu button.report,
+.post-menu button.destructive {
   color: #6d302c;
   border-top: 1px solid #d4d1c9;
   margin-top: 4px;
