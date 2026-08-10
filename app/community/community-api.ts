@@ -222,7 +222,14 @@ export async function updateRemotePost(
     .eq("author_id", data.user.id)
     .select("id")
     .maybeSingle();
-  if (error) throw error;
+  if (error) {
+    if (error.code === "42501") {
+      throw new Error(
+        "Post editing permission is not installed. Apply migration 202608100007.",
+      );
+    }
+    throw error;
+  }
   return updated ? { anonymous: isAnonymous } : false;
 }
 
