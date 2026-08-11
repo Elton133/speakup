@@ -1,0 +1,346 @@
+.conversation-page {
+  min-height: 100vh;
+  background: #eeece6;
+  color: #0b0b0b;
+}
+.conversation-header {
+  min-height: 108px;
+  padding: 20px clamp(24px, 6vw, 90px);
+  border-bottom: 1px solid #c9c6be;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+}
+.conversation-header > a:first-child {
+  color: inherit;
+}
+.conversation-header > a:last-child {
+  color: #5f5d58;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-decoration: none;
+  text-transform: uppercase;
+}
+.conversation-post,
+.conversation-interactions {
+  width: min(820px, calc(100% - 40px));
+  margin-inline: auto;
+}
+.conversation-post {
+  padding: clamp(58px, 9vw, 110px) 0 55px;
+  border-bottom: 1px solid #c9c6be;
+}
+.conversation-kicker {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  color: #6f6c66;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+}
+.conversation-kicker span {
+  color: #fff;
+  background: #494949;
+  padding: 8px 11px;
+}
+.conversation-post h1,
+.conversation-primary {
+  margin: 42px 0 0;
+  font-family: var(--font-flexing);
+  font-size: clamp(44px, 7vw, 82px);
+  font-weight: 400;
+  letter-spacing: -0.045em;
+  line-height: 1.02;
+}
+.conversation-context {
+  max-width: 700px;
+  margin: 38px 0 0;
+  color: #494949;
+  font-size: clamp(18px, 2.2vw, 25px);
+  line-height: 1.58;
+}
+.conversation-post > footer {
+  margin-top: 54px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.conversation-post > footer > span {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: #0b0b0b;
+  color: white;
+  display: grid;
+  place-items: center;
+  font-size: 10px;
+  font-weight: 800;
+}
+.conversation-post > footer div {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.conversation-post > footer b {
+  font-size: 12px;
+}
+.conversation-post > footer small {
+  color: #77746e;
+  font-size: 9px;
+}
+.conversation-actions {
+  padding: 22px 0;
+  border-bottom: 1px solid #c9c6be;
+  display: flex;
+  gap: 30px;
+}
+.conversation-actions button,
+.conversation-actions span {
+  border: 0;
+  background: transparent;
+  color: #605e59;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font: 700 10px var(--font-google-sans-flex);
+}
+.conversation-actions button {
+  cursor: pointer;
+}
+.conversation-actions button:hover,
+.conversation-actions button.liked {
+  color: #0b0b0b;
+}
+.conversation-actions button.liked svg {
+  fill: currentColor;
+}
+.conversation-reply {
+  padding: 44px 0;
+  border-bottom: 1px solid #c9c6be;
+}
+.conversation-reply > label,
+.conversation-comments > header p {
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+}
+.conversation-reply-cancel {
+  float: right;
+  margin-top: -7px;
+  border: 0;
+  border-bottom: 1px solid #8d8a83;
+  background: transparent;
+  color: #686660;
+  padding: 0 0 3px;
+  font: 700 9px var(--font-google-sans-flex);
+  cursor: pointer;
+}
+.conversation-reply > div {
+  margin-top: 14px;
+  border: 1px solid #bbb8b0;
+  background: #f5f3ee;
+}
+.conversation-reply textarea {
+  width: 100%;
+  min-height: 120px;
+  padding: 22px;
+  border: 0;
+  background: transparent;
+  resize: vertical;
+  outline: none;
+  font: 16px/1.55 var(--font-google-sans-flex);
+}
+.conversation-reply button {
+  margin: 0 14px 14px auto;
+  border: 0;
+  background: #0b0b0b;
+  color: white;
+  padding: 13px 17px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font: 800 9px var(--font-google-sans-flex);
+  cursor: pointer;
+  text-transform: uppercase;
+}
+.conversation-reply button:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+.conversation-comments {
+  padding: 42px 0 90px;
+}
+.conversation-comments > header {
+  padding-bottom: 18px;
+  border-bottom: 1px solid #c9c6be;
+  display: flex;
+  justify-content: space-between;
+}
+.conversation-comments article {
+  padding: 28px 0;
+  border-bottom: 1px solid #d0cdc5;
+  display: grid;
+  grid-template-columns: 42px 1fr;
+  gap: 15px;
+}
+.conversation-comments article.is-reply {
+  width: calc(100% - 58px);
+  margin-left: 58px;
+  padding-left: 18px;
+  border-left: 2px solid #c5c2ba;
+}
+.conversation-comments article > span {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: #494949;
+  color: white;
+  display: grid;
+  place-items: center;
+  font-size: 9px;
+  font-weight: 800;
+}
+.conversation-comments article b,
+.conversation-comments article time {
+  font-size: 10px;
+}
+.conversation-comments article time {
+  margin-left: 10px;
+  color: #817e77;
+}
+.conversation-comments article p {
+  margin-top: 10px;
+  color: #393835;
+  font-size: 14px;
+  line-height: 1.6;
+}
+.comment-actions {
+  margin-top: 13px;
+  display: flex;
+  gap: 18px;
+}
+.comment-actions button {
+  border: 0;
+  background: transparent;
+  color: #73706a;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font: 700 9px var(--font-google-sans-flex);
+  cursor: pointer;
+}
+.comment-actions button:hover,
+.comment-actions button.liked {
+  color: #0b0b0b;
+}
+.comment-actions button.liked svg {
+  fill: currentColor;
+}
+.conversation-empty {
+  padding: 70px 0;
+  text-align: center;
+}
+.conversation-empty h2 {
+  font-family: var(--font-flexing);
+  font-size: 38px;
+  font-weight: 400;
+}
+.conversation-empty p {
+  margin-top: 8px;
+  color: #77746e;
+  font-size: 11px;
+}
+.conversation-toast {
+  position: fixed;
+  right: 22px;
+  bottom: 22px;
+  z-index: 30;
+  background: #0b0b0b;
+  color: white;
+  padding: 14px 18px;
+  font-size: 10px;
+  font-weight: 700;
+}
+.conversation-page-footer {
+  padding: 26px;
+  background: #0b0b0b;
+  color: white;
+  font-size: 8px;
+  letter-spacing: 0.16em;
+  text-align: center;
+}
+.conversation-missing {
+  min-height: 100vh;
+  padding: 30px;
+  background: #0b0b0b;
+  color: white;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+.conversation-missing > p {
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.17em;
+}
+.conversation-missing h1 {
+  max-width: 700px;
+  margin: 22px 0 14px;
+  font-family: var(--font-flexing);
+  font-size: clamp(46px, 8vw, 86px);
+  font-weight: 400;
+  line-height: 0.98;
+}
+.conversation-missing span {
+  max-width: 520px;
+  color: #aaa8a3;
+  line-height: 1.6;
+}
+.conversation-missing a {
+  margin-top: 32px;
+  padding: 15px 20px;
+  background: white;
+  color: #0b0b0b;
+  font-size: 10px;
+  font-weight: 800;
+  text-decoration: none;
+  text-transform: uppercase;
+}
+@media (max-width: 600px) {
+  .conversation-header {
+    min-height: 88px;
+    padding-inline: 20px;
+  }
+  .conversation-header .brand-logo {
+    transform: scale(0.72);
+    transform-origin: left center;
+  }
+  .conversation-post,
+  .conversation-interactions {
+    width: calc(100% - 40px);
+  }
+  .conversation-kicker {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .conversation-actions {
+    gap: 18px;
+    overflow-x: auto;
+  }
+  .conversation-actions button,
+  .conversation-actions span {
+    flex: 0 0 auto;
+  }
+  .conversation-comments article.is-reply {
+    width: calc(100% - 28px);
+    margin-left: 28px;
+    padding-left: 12px;
+  }
+}

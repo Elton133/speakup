@@ -385,6 +385,10 @@ export default function Community() {
     setOpenMenu(null);
     notify("Post hidden from your feed");
   }
+  function getPostUrl(post: Post) {
+    const path = post.id.startsWith("seed-") ? "/community" : `/community/post/${post.id}`;
+    return typeof window === "undefined" ? path : `${window.location.origin}${path}`;
+  }
   async function deletePost(id: string) {
     if (!window.confirm("Delete this post and all its comments? This cannot be undone.")) return;
     setOpenMenu(null);
@@ -407,7 +411,7 @@ export default function Community() {
   }
   function copyFromMenu(post: Post) {
     navigator.clipboard.writeText(
-      `“${post.body}” — ${post.author} on SpeakUp\n${window.location.href}`,
+      `“${post.body}” — ${post.author} on SpeakUp\n${getPostUrl(post)}`,
     );
     setOpenMenu(null);
     notify("Post text copied");
@@ -655,7 +659,12 @@ export default function Community() {
         new File([card.blob], `speakup-${post.id}-${index + 1}.png`, { type: "image/png" }),
     );
     if (navigator.share && navigator.canShare?.({ files }))
-      await navigator.share({ title: "A thought from SpeakUp", text: post.body, files });
+      await navigator.share({
+        title: "A thought from SpeakUp",
+        text: post.body,
+        url: getPostUrl(post),
+        files,
+      });
   }
   function closeShare() {
     shareCards.forEach((card) => URL.revokeObjectURL(card.url));
@@ -687,7 +696,7 @@ export default function Community() {
   }
   function copyPost(post: Post) {
     navigator.clipboard.writeText(
-      `“${post.body}” — ${post.author} on SpeakUp\n${window.location.href}`,
+      `“${post.body}” — ${post.author} on SpeakUp\n${getPostUrl(post)}`,
     );
     setSharePost(null);
   }
@@ -886,6 +895,7 @@ export default function Community() {
                     ),
                   );
                   markNotificationRead(item.id).catch(() => notify("Could not update notice"));
+                  if (item.postId) window.location.href = `/community/post/${item.postId}`;
                 }}
               >
                 <span>
@@ -1012,6 +1022,11 @@ export default function Community() {
                   </div>
                   {post.quote && <blockquote>“{post.quote}”</blockquote>}
                   <p className="community-post__body">{post.body}</p>
+                  {!post.id.startsWith("seed-") && (
+                    <a className="post-permalink" href={`/community/post/${post.id}`}>
+                      Open conversation ↗
+                    </a>
+                  )}
                   <div className="community-actions">
                     <button
                       className={post.liked ? "liked" : ""}
@@ -1369,20 +1384,20 @@ export default function Community() {
                 </button>
                 <a
                   target="_blank"
-                  href={`https://twitter.com/intent/tweet?text=${encodeURIComponent(sharePost.body)}&url=${encodeURIComponent(typeof window === "undefined" ? "" : window.location.href)}`}
+                  href={`https://twitter.com/intent/tweet?text=${encodeURIComponent(sharePost.body)}&url=${encodeURIComponent(getPostUrl(sharePost))}`}
                 >
                   <Icon icon={NewTwitterIcon} />X
                 </a>
                 <a
                   target="_blank"
-                  href={`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(typeof window === "undefined" ? "" : window.location.href)}`}
+                  href={`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(getPostUrl(sharePost))}`}
                 >
                   <Icon icon={Facebook01Icon} />
                   Facebook
                 </a>
                 <a
                   target="_blank"
-                  href={`https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(typeof window === "undefined" ? "" : window.location.href)}`}
+                  href={`https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(getPostUrl(sharePost))}`}
                 >
                   <Icon icon={Linkedin01Icon} />
                   LinkedIn

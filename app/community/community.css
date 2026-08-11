@@ -250,6 +250,21 @@
   margin: 22px 0;
   color: #333;
 }
+.post-permalink {
+  display: inline-block;
+  margin-top: 16px;
+  color: #686660;
+  border-bottom: 1px solid #aaa79f;
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-decoration: none;
+  text-transform: uppercase;
+}
+.post-permalink:hover {
+  color: #0b0b0b;
+  border-color: #0b0b0b;
+}
 .community-actions {
   border-top: 1px solid #d8d5ce;
   padding: 14px 0;

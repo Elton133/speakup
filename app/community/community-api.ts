@@ -56,6 +56,7 @@ export type CommunityNotice = {
   id: string;
   kind: "comment" | "like" | "community";
   message: string;
+  postId?: string;
   isRead: boolean;
   time: string;
 };
@@ -146,7 +147,7 @@ export async function loadNotifications(): Promise<CommunityNotice[]> {
   if (!auth.user) return [];
   const { data, error } = await supabase
     .from("notifications")
-    .select("id,kind,message,is_read,created_at")
+    .select("id,kind,message,post_id,is_read,created_at")
     .order("created_at", { ascending: false })
     .limit(30);
   if (error) throw error;
@@ -154,6 +155,7 @@ export async function loadNotifications(): Promise<CommunityNotice[]> {
     id: row.id as string,
     kind: row.kind as CommunityNotice["kind"],
     message: row.message as string,
+    postId: (row.post_id as string | null) || undefined,
     isRead: row.is_read as boolean,
     time: relativeTime(row.created_at as string),
   }));
@@ -224,9 +226,7 @@ export async function updateRemotePost(
     .maybeSingle();
   if (error) {
     if (error.code === "42501") {
-      throw new Error(
-        "Post editing permission is not installed. Apply migration 202608100007.",
-      );
+      throw new Error("Post editing permission is not installed. Apply migration 202608100007.");
     }
     throw error;
   }
@@ -288,15 +288,31 @@ export async function setRemoteSaved(postId: string, saved: boolean) {
   return true;
 }
 
-export async function createRemoteComment(postId: string, body: string) {
+export async function createRemoteComment(postId: string, body: string, parentCommentId?: string) {
   if (postId.startsWith("seed-")) return null;
   const { supabase, user } = await ensureCommunityUser();
   const isAnonymous = Boolean(user.is_anonymous);
   const { data: comment, error } = await supabase
     .from("comments")
-    .insert({ post_id: postId, author_id: user.id, body, is_anonymous: isAnonymous })
+    .insert({
+      post_id: postId,
+      author_id: user.id,
+      body,
+      is_anonymous: isAnonymous,
+      parent_comment_id: parentCommentId || null,
+    })
     .select("id")
     .single();
   if (error) throw error;
   return { id: comment.id as string, anonymous: isAnonymous };
+}
+
+export async function setRemoteCommentLike(commentId: string, liked: boolean) {
+  const { supabase, user } = await ensureCommunityUser();
+  const query = supabase.from("comment_likes");
+  const { error } = liked
+    ? await query.insert({ comment_id: commentId, user_id: user.id })
+    : await query.delete().eq("comment_id", commentId).eq("user_id", user.id);
+  if (error) throw error;
+  return true;
 }
