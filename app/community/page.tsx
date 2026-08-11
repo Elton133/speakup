@@ -522,13 +522,16 @@ export default function Community() {
       });
     const baseVariant =
       [...post.id].reduce((total, character) => total + character.charCodeAt(0), 0) % 5;
-    const mainChunks = splitShareText(post.quote || post.body, post.quote ? 250 : 330);
+    const mainChunks = splitShareText(post.quote || post.body, post.quote ? 410 : 430);
     const supportingChunks = post.quote ? splitShareText(post.body, 300) : [];
     const pages: Array<{ main?: string; supporting?: string }> = mainChunks.map((main) => ({
       main,
     }));
     if (supportingChunks.length) {
-      pages[0].supporting = supportingChunks.shift();
+      const finalMainPage = pages[pages.length - 1];
+      if ((finalMainPage.main?.length ?? 0) <= 220 && supportingChunks[0].length <= 220) {
+        finalMainPage.supporting = supportingChunks.shift();
+      }
       pages.push(...supportingChunks.map((supporting) => ({ supporting })));
     }
     const mark = await loadImage("/assets/brand/hand-lantern-mark.png");
@@ -579,10 +582,17 @@ export default function Community() {
         ctx.textBaseline = "alphabetic";
         let contentBottom = 170;
         if (page.main) {
-          const fontSize = page.main.length > 230 ? 49 : page.main.length > 150 ? 55 : 66;
+          const fontSize =
+            page.main.length > 340
+              ? 40
+              : page.main.length > 260
+                ? 45
+                : page.main.length > 170
+                  ? 52
+                  : 66;
           const lineHeight = fontSize * 1.16;
           ctx.font = `400 ${fontSize}px ${flexing}`;
-          const lines = wrapText(ctx, `“${page.main}”`, 900).slice(0, 9);
+          const lines = wrapText(ctx, `“${page.main}”`, 900).slice(0, page.supporting ? 7 : 12);
           lines.forEach((line, index) => ctx.fillText(line, 74, 190 + index * lineHeight));
           contentBottom = 190 + lines.length * lineHeight;
         }
@@ -653,13 +663,27 @@ export default function Community() {
     setShareCards([]);
     setShareCardIndex(0);
   }
-  function downloadShareCards(post: Post) {
-    shareCards.forEach((card, index) => {
+  async function downloadShareCards(post: Post) {
+    if (shareCards.length === 1) {
       const link = document.createElement("a");
-      link.download = `speakup-${post.id}-${index + 1}-of-${shareCards.length}.png`;
-      link.href = card.url;
+      link.download = `speakup-${post.id}.png`;
+      link.href = shareCards[0].url;
       link.click();
-    });
+      return;
+    }
+
+    const { default: JSZip } = await import("jszip");
+    const zip = new JSZip();
+    shareCards.forEach((card, index) =>
+      zip.file(`speakup-${post.id}-${index + 1}-of-${shareCards.length}.png`, card.blob),
+    );
+    const archive = await zip.generateAsync({ type: "blob" });
+    const archiveUrl = URL.createObjectURL(archive);
+    const link = document.createElement("a");
+    link.download = `speakup-${post.id}-cards.zip`;
+    link.href = archiveUrl;
+    link.click();
+    window.setTimeout(() => URL.revokeObjectURL(archiveUrl), 1000);
   }
   function copyPost(post: Post) {
     navigator.clipboard.writeText(
