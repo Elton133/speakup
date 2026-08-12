@@ -16,10 +16,26 @@ type PostRow = {
     id: string;
     body: string;
     is_anonymous: boolean;
+    created_at: string;
+    parent_comment_id: string | null;
     profiles: { display_name: string } | null;
+    comment_likes: Array<{ user_id: string }>;
   }>;
   post_likes: Array<{ user_id: string }>;
 };
+
+const POST_SELECT =
+  "id,author_id,topic,body,quote,is_anonymous,created_at," +
+  "profiles!posts_author_id_fkey(display_name)," +
+  "comments(id,body,is_anonymous,created_at,parent_comment_id," +
+  "profiles!comments_author_id_fkey(display_name),comment_likes(user_id))," +
+  "post_likes(user_id)";
+
+// Commas and parentheses delimit filters inside an `or(...)` group, and % / _
+// are ilike wildcards. Drop them so a search phrase stays a search phrase.
+function escapeSearchTerm(term: string) {
+  return term.replace(/[,()%_\\*]/g, " ").replace(/\s+/g, " ").trim();
+}
 
 function initials(name: string) {
   return name
@@ -30,7 +46,7 @@ function initials(name: string) {
     .toUpperCase();
 }
 
-function relativeTime(value: string) {
+export function relativeTime(value: string) {
   const minutes = Math.max(1, Math.floor((Date.now() - new Date(value).getTime()) / 60000));
   if (minutes < 60) return `${minutes} min`;
   const hours = Math.floor(minutes / 60);
@@ -64,6 +80,7 @@ export type CommunityNotice = {
 export async function loadCommunity(
   page = 0,
   pageSize = 10,
+  options: { search?: string; topic?: string } = {},
 ): Promise<{
   posts: Post[];
   saved: string[];
@@ -76,11 +93,14 @@ export async function loadCommunity(
   const supabase = createClient();
   const { data: auth } = await supabase.auth.getUser();
   const user = auth.user;
-  const { data, error } = await supabase
-    .from("posts")
-    .select(
-      "id,author_id,topic,body,quote,is_anonymous,created_at,profiles!posts_author_id_fkey(display_name),comments(id,body,is_anonymous,profiles!comments_author_id_fkey(display_name)),post_likes(user_id)",
-    )
+  let query = supabase.from("posts").select(POST_SELECT);
+
+  const term = escapeSearchTerm(options.search ?? "");
+  if (term)
+    query = query.or(`body.ilike.%${term}%,quote.ilike.%${term}%,topic.ilike.%${term}%`);
+  if (options.topic) query = query.eq("topic", options.topic);
+
+  const { data, error } = await query
     .order("created_at", { ascending: false })
     .range(page * pageSize, page * pageSize + pageSize - 1);
   if (error) throw error;
@@ -116,11 +136,19 @@ export async function loadCommunity(
         likes: row.post_likes.length,
         liked: Boolean(user && row.post_likes.some((like) => like.user_id === user.id)),
         ownedByMe: Boolean(user && row.author_id === user.id),
-        comments: row.comments.map((comment) => ({
-          id: comment.id,
-          author: comment.is_anonymous ? "Anonymous" : comment.profiles?.display_name || "Member",
-          body: comment.body,
-        })),
+        comments: row.comments
+          .map((comment) => ({
+            id: comment.id,
+            author: comment.is_anonymous ? "Anonymous" : comment.profiles?.display_name || "Member",
+            body: comment.body,
+            createdAt: comment.created_at,
+            parentCommentId: comment.parent_comment_id,
+            likes: comment.comment_likes.length,
+            liked: Boolean(
+              user && comment.comment_likes.some((like) => like.user_id === user.id),
+            ),
+          }))
+          .sort((a, b) => a.createdAt.localeCompare(b.createdAt)),
       };
     }),
   };
@@ -134,10 +162,76 @@ export function subscribeToCommunity(onChange: () => void) {
     .on("postgres_changes", { event: "*", schema: "public", table: "posts" }, onChange)
     .on("postgres_changes", { event: "*", schema: "public", table: "comments" }, onChange)
     .on("postgres_changes", { event: "*", schema: "public", table: "post_likes" }, onChange)
+    .on("postgres_changes", { event: "*", schema: "public", table: "comment_likes" }, onChange)
     .subscribe();
   return () => {
     supabase.removeChannel(channel);
   };
+}
+
+export function subscribeToNotifications(userId: string, onChange: () => void) {
+  if (!isSupabaseConfigured) return () => undefined;
+  const supabase = createClient();
+  const channel = supabase
+    .channel("speakup-notification-changes")
+    .on(
+      "postgres_changes",
+      {
+        event: "*",
+        schema: "public",
+        table: "notifications",
+        filter: `recipient_id=eq.${userId}`,
+      },
+      onChange,
+    )
+    .subscribe();
+  return () => {
+    supabase.removeChannel(channel);
+  };
+}
+
+export async function loadProfileStats() {
+  if (!isSupabaseConfigured) return null;
+  const supabase = createClient();
+  const { data: auth } = await supabase.auth.getUser();
+  const user = auth.user;
+  if (!user) return null;
+
+  const [thoughts, saved, liked] = await Promise.all([
+    supabase.from("posts").select("id", { count: "exact", head: true }).eq("author_id", user.id),
+    supabase.from("saved_posts").select("post_id", { count: "exact", head: true }),
+    supabase
+      .from("post_likes")
+      .select("post_id", { count: "exact", head: true })
+      .eq("user_id", user.id),
+  ]);
+
+  return {
+    thoughts: thoughts.count ?? 0,
+    saved: saved.count ?? 0,
+    liked: liked.count ?? 0,
+  };
+}
+
+export async function loadTrendingTopics(sampleSize = 300) {
+  if (!isSupabaseConfigured) return [];
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from("posts")
+    .select("topic")
+    .order("created_at", { ascending: false })
+    .limit(sampleSize);
+  if (error) throw error;
+
+  const counts = new Map<string, number>();
+  for (const row of data ?? []) {
+    const topic = row.topic as string;
+    counts.set(topic, (counts.get(topic) ?? 0) + 1);
+  }
+  return [...counts.entries()]
+    .map(([topic, count]) => ({ topic, count }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 4);
 }
 
 export async function loadNotifications(): Promise<CommunityNotice[]> {

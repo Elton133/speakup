@@ -2,6 +2,10 @@ export type Comment = {
   id: string;
   author: string;
   body: string;
+  createdAt?: string;
+  parentCommentId?: string | null;
+  likes: number;
+  liked?: boolean;
 };
 
 export type Post = {

@@ -30,12 +30,21 @@ export function GoogleAuthButton() {
       return;
     }
 
-    const options = { redirectTo: `${window.location.origin}/auth/callback?next=/community` };
-    if (user?.is_anonymous) {
-      await supabase.auth.linkIdentity({ provider: "google", options });
-    } else {
-      await supabase.auth.signInWithOAuth({ provider: "google", options });
+    const configuredSiteUrl = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "");
+    const siteUrl = configuredSiteUrl || window.location.origin;
+    const options = { redirectTo: `${siteUrl}/auth/callback?next=/community` };
+
+    try {
+      const { error } = user?.is_anonymous
+        ? await supabase.auth.linkIdentity({ provider: "google", options })
+        : await supabase.auth.signInWithOAuth({ provider: "google", options });
+      if (error) throw error;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Google authentication failed";
+      window.location.href = `/community?auth=error&reason=${encodeURIComponent(message)}`;
+      return;
     }
+    setBusy(false);
   }
 
   return (

@@ -1,6 +1,8 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import { HugeiconsIcon } from "@hugeicons/react";
 import {
@@ -29,22 +31,28 @@ import {
   UserCircleIcon,
 } from "@hugeicons/core-free-icons";
 import "./community.css";
+import { isSupabaseConfigured } from "../../lib/supabase/config";
 import { BrandLogo } from "../components/brand-logo";
 import { GoogleAuthButton } from "../components/google-auth-button";
 import { PushNotificationSettings } from "../components/push-notification-settings";
 import { seedPosts, topics } from "./data";
-import type { Post } from "./types";
+import type { Comment, Post } from "./types";
 import {
   createRemoteComment,
   createRemotePost,
   deleteRemotePost,
   loadNotifications,
   loadCommunity,
+  loadProfileStats,
+  loadTrendingTopics,
   markNotificationRead,
+  relativeTime,
   reportRemotePost,
+  setRemoteCommentLike,
   setRemoteLike,
   setRemoteSaved,
   subscribeToCommunity,
+  subscribeToNotifications,
   updateRemotePost,
   updateRemoteProfile,
   type CommunityNotice,
@@ -53,26 +61,73 @@ const Icon = ({ icon, size = 19 }: { icon: typeof Home01Icon; size?: number }) =
   <HugeiconsIcon icon={icon} size={size} strokeWidth={1.7} aria-hidden="true" />
 );
 
+const FOCUSABLE =
+  'a[href],button:not([disabled]),input:not([disabled]),textarea:not([disabled]),select:not([disabled]),[tabindex]:not([tabindex="-1"])';
+
+/**
+ * Moves focus into a dialog while it is open, keeps Tab inside it, and returns
+ * focus to whatever opened it on close.
+ */
+function useDialog<T extends HTMLElement>(open: boolean) {
+  const ref = useRef<T>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const opener = document.activeElement as HTMLElement | null;
+    const container = ref.current;
+    const preferred =
+      container?.querySelector<HTMLElement>("[data-autofocus]") ??
+      container?.querySelector<HTMLElement>(FOCUSABLE);
+    (preferred ?? container)?.focus();
+
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key !== "Tab" || !ref.current) return;
+      const items = [...ref.current.querySelectorAll<HTMLElement>(FOCUSABLE)].filter(
+        (item) => item.offsetParent !== null,
+      );
+      if (!items.length) return;
+      const edge = event.shiftKey ? items[0] : items[items.length - 1];
+      if (document.activeElement === edge) {
+        event.preventDefault();
+        (event.shiftKey ? items[items.length - 1] : items[0]).focus();
+      }
+    }
+
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      opener?.focus?.();
+    };
+  }, [open]);
+
+  return ref;
+}
+
 export default function Community() {
   const [view, setView] = useState<"feed" | "explore" | "notices" | "saved" | "profile">("feed");
-  const [posts, setPosts] = useState(seedPosts);
+  // Seed posts are demo content: they stand in only when there is no backend to read.
+  const [posts, setPosts] = useState<Post[]>(isSupabaseConfigured ? [] : seedPosts);
   const [filter, setFilter] = useState("For you");
   const [composer, setComposer] = useState(false);
   const [editingPostId, setEditingPostId] = useState<string | null>(null);
   const [anonymous, setAnonymous] = useState(false);
+  const [anonymousAccount, setAnonymousAccount] = useState(false);
   const [mainText, setMainText] = useState("");
   const [body, setBody] = useState("");
   const [topic, setTopic] = useState("Reflection");
   const [openComments, setOpenComments] = useState<string | null>(null);
-  const [comment, setComment] = useState("");
+  const [commentDrafts, setCommentDrafts] = useState<Record<string, string>>({});
+  const [replyTargets, setReplyTargets] = useState<Record<string, Comment | null>>({});
   const [sharePost, setSharePost] = useState<Post | null>(null);
   const [shareCards, setShareCards] = useState<Array<{ url: string; blob: Blob }>>([]);
   const [shareCardIndex, setShareCardIndex] = useState(0);
   const [identityOpen, setIdentityOpen] = useState(false);
   const [displayName, setDisplayName] = useState("Guest seeker");
   const [search, setSearch] = useState("");
+  const [searchState, setSearchState] = useState<{ term: string; posts: Post[] } | null>(null);
   const [openMenu, setOpenMenu] = useState<string | null>(null);
   const [savedPosts, setSavedPosts] = useState<Set<string>>(new Set());
+  const [hiddenPosts, setHiddenPosts] = useState<Set<string>>(new Set());
   const [savedReady, setSavedReady] = useState(false);
   const [notice, setNotice] = useState("");
   const [communityNotices, setCommunityNotices] = useState<CommunityNotice[]>([]);
@@ -80,16 +135,45 @@ export default function Community() {
   const [backendError, setBackendError] = useState("");
   const [page, setPage] = useState(0);
   const [hasMore, setHasMore] = useState(false);
+  const [userId, setUserId] = useState<string | null>(null);
+  const [profileStats, setProfileStats] = useState<{
+    thoughts: number;
+    saved: number;
+    liked: number;
+  } | null>(null);
+  const [trending, setTrending] = useState<Array<{ topic: string; count: number }>>([]);
+  const noticeTimer = useRef<number | undefined>(undefined);
+  const router = useRouter();
+  const composerRef = useDialog<HTMLFormElement>(composer);
+  const identityRef = useDialog<HTMLDivElement>(identityOpen);
+  const shareRef = useDialog<HTMLDivElement>(Boolean(sharePost));
+  // Read a browser-only capability without desyncing from the server render.
+  const canNativeShare = useSyncExternalStore(
+    () => () => undefined,
+    () => Boolean(navigator.share),
+    () => false,
+  );
 
   useEffect(() => {
     try {
       const saved = JSON.parse(window.localStorage.getItem("speakup-saved-posts") || "[]");
       setSavedPosts(new Set(Array.isArray(saved) ? saved : []));
+      const hidden = JSON.parse(window.localStorage.getItem("speakup-hidden-posts") || "[]");
+      setHiddenPosts(new Set(Array.isArray(hidden) ? hidden : []));
       const savedDisplayName = window.localStorage.getItem("speakup-display-name");
       if (savedDisplayName) setDisplayName(savedDisplayName);
     } finally {
       setSavedReady(true);
     }
+  }, []);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("auth") !== "error") return;
+    const reason = params.get("reason") || "Google authentication could not be completed.";
+    setBackendError(`Google sign-in failed: ${reason}`);
+    notify("Google sign-in could not be completed");
+    window.history.replaceState({}, "", window.location.pathname);
   }, []);
 
   useEffect(() => {
@@ -99,14 +183,12 @@ export default function Community() {
           { posts: remotePosts, saved, user, displayName: profileName, hasMore: more },
           notices,
         ]) => {
-          if (remotePosts.length)
-            setPosts((current) => [
-              ...remotePosts,
-              ...current.filter((post) => post.id.startsWith("seed-")),
-            ]);
+          if (remotePosts.length) setPosts(remotePosts);
           if (saved.length) setSavedPosts((current) => new Set([...current, ...saved]));
           if (user) {
             const isAnonymousUser = Boolean(user.is_anonymous);
+            setUserId(user.id);
+            setAnonymousAccount(isAnonymousUser);
             setAnonymous(isAnonymousUser);
             setDisplayName(
               profileName ||
@@ -120,50 +202,141 @@ export default function Community() {
         },
       )
       .catch(() => {
+        setPosts(seedPosts);
         setBackendError(
           "Live updates are temporarily unavailable. Showing saved community content.",
         );
         notify("Using the offline community feed");
       })
       .finally(() => setLoadingFeed(false));
+
+    loadTrendingTopics()
+      .then(setTrending)
+      .catch(() => setTrending([]));
   }, []);
 
   useEffect(() => {
     let refreshTimer: number | undefined;
-    return subscribeToCommunity(() => {
+    const unsubscribe = subscribeToCommunity(() => {
       window.clearTimeout(refreshTimer);
       refreshTimer = window.setTimeout(() => {
+        // Merge rather than replace, so posts pulled in by "Load more" and any
+        // post still awaiting its first sync survive a live refresh.
         loadCommunity().then(({ posts: remotePosts, hasMore: more }) => {
-          setPosts((current) => [
-            ...remotePosts,
-            ...current.filter((post) => post.id.startsWith("seed-")),
-          ]);
-          setHasMore(more);
-          setPage(0);
+          setPosts((current) => {
+            const refreshed = new Set(remotePosts.map((post) => post.id));
+            return [...remotePosts, ...current.filter((post) => !refreshed.has(post.id))];
+          });
+          if (page === 0) setHasMore(more);
         });
       }, 450);
     });
-  }, []);
+    return () => {
+      window.clearTimeout(refreshTimer);
+      unsubscribe();
+    };
+  }, [page]);
+
+  useEffect(() => {
+    if (!userId) return;
+    return subscribeToNotifications(userId, () => {
+      loadNotifications()
+        .then(setCommunityNotices)
+        .catch(() => undefined);
+    });
+  }, [userId]);
+
+  useEffect(() => {
+    if (view !== "profile" || !userId) return;
+    loadProfileStats()
+      .then(setProfileStats)
+      .catch(() => setProfileStats(null));
+  }, [view, userId]);
+
+  // Search the whole community, not just the page already in memory.
+  useEffect(() => {
+    const term = search.trim();
+    if (!term || !isSupabaseConfigured) return;
+    let active = true;
+    const timer = window.setTimeout(() => {
+      loadCommunity(0, 30, { search: term })
+        .then(({ posts: found }) => {
+          if (active) setSearchState({ term, posts: found });
+        })
+        .catch(() => {
+          if (active) setSearchState({ term, posts: [] });
+        });
+    }, 300);
+    return () => {
+      active = false;
+      window.clearTimeout(timer);
+    };
+  }, [search]);
 
   useEffect(() => {
     if (!savedReady) return;
     window.localStorage.setItem("speakup-saved-posts", JSON.stringify([...savedPosts]));
   }, [savedPosts, savedReady]);
 
-  const visible = useMemo(
-    () =>
-      posts.filter(
-        (p) =>
-          (view !== "saved" || savedPosts.has(p.id)) &&
-          (filter === "For you" ||
-            p.topic === filter ||
-            (filter === "Questions" && p.topic === "Question")) &&
-          `${p.quote || ""} ${p.body} ${p.author} ${p.topic}`
-            .toLowerCase()
-            .includes(search.toLowerCase()),
-      ),
-    [posts, filter, search, savedPosts, view],
-  );
+  useEffect(() => {
+    if (!savedReady) return;
+    window.localStorage.setItem("speakup-hidden-posts", JSON.stringify([...hiddenPosts]));
+  }, [hiddenPosts, savedReady]);
+
+  // Escape closes the topmost layer; a click outside a post menu dismisses it.
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key !== "Escape") return;
+      if (sharePost) closeShare();
+      else if (identityOpen) setIdentityOpen(false);
+      else if (composer) closeComposer();
+      else if (openMenu) setOpenMenu(null);
+    }
+    function onPointerDown(event: MouseEvent) {
+      if (!openMenu) return;
+      if (!(event.target as HTMLElement).closest(".post-menu-wrap")) setOpenMenu(null);
+    }
+    document.addEventListener("keydown", onKeyDown);
+    document.addEventListener("pointerdown", onPointerDown);
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      document.removeEventListener("pointerdown", onPointerDown);
+    };
+  });
+
+  useEffect(() => () => window.clearTimeout(noticeTimer.current), []);
+
+  const searchTerm = search.trim().toLowerCase();
+  const remoteTerm = isSupabaseConfigured ? search.trim() : "";
+  // Remote results are authoritative once they arrive; until then the loaded
+  // page is still filtered locally so the feed never goes blank mid-keystroke.
+  const searchResults = remoteTerm && searchState?.term === remoteTerm ? searchState.posts : null;
+  const searching = Boolean(remoteTerm) && !searchResults;
+  const visible = useMemo(() => {
+    const source = searchResults
+      ? [
+          ...searchResults,
+          // Seed posts only exist offline, and are never returned by the query.
+          ...posts.filter(
+            (post) =>
+              post.id.startsWith("seed-") &&
+              `${post.quote || ""} ${post.body} ${post.author} ${post.topic}`
+                .toLowerCase()
+                .includes(searchTerm),
+          ),
+        ]
+      : posts;
+    return source.filter(
+      (p) =>
+        !hiddenPosts.has(p.id) &&
+        (view !== "saved" || savedPosts.has(p.id)) &&
+        (filter === "For you" ||
+          p.topic === filter ||
+          (filter === "Questions" && p.topic === "Question")) &&
+        (Boolean(searchResults) ||
+          `${p.quote || ""} ${p.body} ${p.author} ${p.topic}`.toLowerCase().includes(searchTerm)),
+    );
+  }, [posts, searchResults, searchTerm, filter, savedPosts, hiddenPosts, view]);
   const displayNotices = communityNotices;
   const unreadNoticeCount = displayNotices.filter((item) => !item.isRead).length;
 
@@ -172,9 +345,8 @@ export default function Community() {
     try {
       const { posts: nextPosts, hasMore: more } = await loadCommunity(nextPage);
       setPosts((current) => [
-        ...current.filter((post) => !post.id.startsWith("seed-")),
+        ...current,
         ...nextPosts.filter((post) => !current.some((existing) => existing.id === post.id)),
-        ...seedPosts,
       ]);
       setPage(nextPage);
       setHasMore(more);
@@ -201,6 +373,9 @@ export default function Community() {
     if (!featured && !supporting) return;
     const postBody = supporting || featured;
     const postQuote = featured && supporting ? featured : undefined;
+    // Anonymous accounts are forced anonymous by the database, so never preview
+    // a name the post will not carry.
+    const postAnonymously = anonymousAccount || anonymous;
 
     if (editingPostId) {
       try {
@@ -208,7 +383,7 @@ export default function Community() {
           topic,
           body: postBody,
           quote: postQuote,
-          anonymous,
+          anonymous: postAnonymously,
         });
         if (!updated) {
           notify("This post could not be updated");
@@ -247,13 +422,13 @@ export default function Community() {
       }
       return;
     }
-    const name = anonymous ? "Anonymous" : displayName;
+    const name = postAnonymously ? "Anonymous" : displayName;
     const localId = crypto.randomUUID();
     const newPost: Post = {
       id: localId,
       author: name,
-      handle: anonymous ? "Identity protected" : "Guest contributor",
-      initials: anonymous
+      handle: postAnonymously ? "Identity protected" : "Guest contributor",
+      initials: postAnonymously
         ? "A"
         : name
             .split(" ")
@@ -261,7 +436,7 @@ export default function Community() {
             .join("")
             .slice(0, 2)
             .toUpperCase(),
-      anonymous,
+      anonymous: postAnonymously,
       time: "now",
       topic,
       body: postBody,
@@ -279,7 +454,7 @@ export default function Community() {
         topic,
         body: newPost.body,
         quote: newPost.quote,
-        anonymous,
+        anonymous: postAnonymously,
       });
       if (remotePost) {
         setPosts((current) =>
@@ -361,8 +536,9 @@ export default function Community() {
     }
   }
   function notify(message: string) {
+    window.clearTimeout(noticeTimer.current);
     setNotice(message);
-    window.setTimeout(() => setNotice(""), 2400);
+    noticeTimer.current = window.setTimeout(() => setNotice(""), 2400);
   }
   function toggleSaved(id: string) {
     const willSave = !savedPosts.has(id);
@@ -381,7 +557,7 @@ export default function Community() {
     setRemoteSaved(id, willSave).catch(() => notify("Saved on this device only"));
   }
   function hidePost(id: string) {
-    setPosts((current) => current.filter((post) => post.id !== id));
+    setHiddenPosts((current) => new Set(current).add(id));
     setOpenMenu(null);
     notify("Post hidden from your feed");
   }
@@ -416,23 +592,40 @@ export default function Community() {
     setOpenMenu(null);
     notify("Post text copied");
   }
+  function setDraft(postId: string, value: string) {
+    setCommentDrafts((current) => ({ ...current, [postId]: value }));
+  }
+
   async function addComment(id: string) {
-    if (!comment.trim()) return;
-    const text = comment.trim();
+    const text = (commentDrafts[id] || "").trim();
+    if (!text) return;
+    const parent = replyTargets[id] || null;
     const localId = crypto.randomUUID();
-    setPosts(
-      posts.map((p) =>
+    setPosts((current) =>
+      current.map((p) =>
         p.id === id
           ? {
               ...p,
-              comments: [...p.comments, { id: localId, author: displayName, body: text }],
+              comments: [
+                ...p.comments,
+                {
+                  id: localId,
+                  author: anonymousAccount ? "Anonymous" : displayName,
+                  body: text,
+                  createdAt: new Date().toISOString(),
+                  parentCommentId: parent?.id ?? null,
+                  likes: 0,
+                  liked: false,
+                },
+              ],
             }
           : p,
       ),
     );
-    setComment("");
+    setDraft(id, "");
+    setReplyTargets((current) => ({ ...current, [id]: null }));
     try {
-      const remoteComment = await createRemoteComment(id, text);
+      const remoteComment = await createRemoteComment(id, text, parent?.id);
       if (remoteComment)
         setPosts((current) =>
           current.map((post) =>
@@ -472,6 +665,46 @@ export default function Community() {
       );
       notify("The comment could not be saved. Please try again.");
     }
+  }
+  async function toggleCommentLike(postId: string, commentId: string) {
+    const post = posts.find((item) => item.id === postId);
+    const target = post?.comments.find((item) => item.id === commentId);
+    if (!target) return;
+    const nextLiked = !target.liked;
+    const applyLike = (liked: boolean, likes: number) =>
+      setPosts((current) =>
+        current.map((item) =>
+          item.id === postId
+            ? {
+                ...item,
+                comments: item.comments.map((entry) =>
+                  entry.id === commentId ? { ...entry, liked, likes } : entry,
+                ),
+              }
+            : item,
+        ),
+      );
+    applyLike(nextLiked, target.likes + (nextLiked ? 1 : -1));
+    if (postId.startsWith("seed-")) return;
+    try {
+      await setRemoteCommentLike(commentId, nextLiked);
+    } catch {
+      applyLike(Boolean(target.liked), target.likes);
+      notify("The response like could not be saved");
+    }
+  }
+  function threadComments(comments: Comment[]) {
+    const roots = comments.filter((item) => !item.parentCommentId);
+    const rootIds = new Set(roots.map((item) => item.id));
+    const threaded = roots.flatMap((root) => [
+      root,
+      ...comments.filter((item) => item.parentCommentId === root.id),
+    ]);
+    // Replies whose parent is not loaded still deserve to be readable.
+    return [
+      ...threaded,
+      ...comments.filter((item) => item.parentCommentId && !rootIds.has(item.parentCommentId)),
+    ];
   }
   function wrapText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number) {
     const words = text.split(" "),
@@ -554,7 +787,8 @@ export default function Community() {
         const ctx = canvas.getContext("2d")!;
         const variant = (baseVariant + pageIndex) % 5;
         const photo = variant === 1;
-        let light = photo ? "#ffffff" : palette[variant === 0 ? 3 : variant - 2]?.fg || "#0b0b0b";
+        const theme = variant === 0 ? palette[3] : palette[variant - 2] || palette[0];
+        const light = photo ? "#ffffff" : theme.fg;
         if (photo) {
           const scale = Math.max(1080 / hero.width, 1080 / hero.height);
           const width = hero.width * scale;
@@ -567,10 +801,8 @@ export default function Community() {
           ctx.fillStyle = shade;
           ctx.fillRect(0, 0, 1080, 1080);
         } else {
-          const theme = variant === 0 ? palette[3] : palette[variant - 2] || palette[0];
           ctx.fillStyle = theme.bg;
           ctx.fillRect(0, 0, 1080, 1080);
-          light = theme.fg;
           ctx.strokeStyle = light === "#ffffff" ? "rgba(255,255,255,.16)" : "rgba(11,11,11,.13)";
           ctx.lineWidth = 2;
           ctx.beginPath();
@@ -648,23 +880,32 @@ export default function Community() {
     );
   }
   async function nativeShare(post: Post) {
+    shareCards.forEach((card) => URL.revokeObjectURL(card.url));
+    setShareCards([]);
     setSharePost(post);
     setShareCardIndex(0);
+    setOpenMenu(null);
     setShareCards(await createShareCards(post));
   }
   async function shareViaDevice(post: Post) {
-    const cards = await createShareCards(post);
+    const cards = shareCards.length ? shareCards : await createShareCards(post);
     const files = cards.map(
       (card, index) =>
         new File([card.blob], `speakup-${post.id}-${index + 1}.png`, { type: "image/png" }),
     );
-    if (navigator.share && navigator.canShare?.({ files }))
-      await navigator.share({
-        title: "A thought from SpeakUp",
-        text: post.body,
-        url: getPostUrl(post),
-        files,
-      });
+    const payload = {
+      title: "A thought from SpeakUp",
+      text: post.body,
+      url: getPostUrl(post),
+    };
+    try {
+      if (navigator.canShare?.({ ...payload, files })) await navigator.share({ ...payload, files });
+      else if (navigator.share) await navigator.share(payload);
+      else notify("Sharing is not supported on this device");
+    } catch (error) {
+      // A user dismissing the share sheet is not a failure worth reporting.
+      if ((error as Error)?.name !== "AbortError") notify("Sharing could not be completed");
+    }
   }
   function closeShare() {
     shareCards.forEach((card) => URL.revokeObjectURL(card.url));
@@ -704,9 +945,9 @@ export default function Community() {
   return (
     <main className="community-app">
       <aside className="community-sidebar">
-        <a href="/" aria-label="Back to SpeakUp home">
+        <Link href="/" aria-label="Back to SpeakUp home">
           <BrandLogo />
-        </a>
+        </Link>
         <nav aria-label="Community navigation">
           <button className={view === "feed" ? "active" : ""} onClick={() => setView("feed")}>
             <Icon icon={Home01Icon} /> <span>Home</span>
@@ -746,9 +987,9 @@ export default function Community() {
 
       <section className="community-main" id="feed">
         <header className="community-topbar">
-          <a className="community-mobile-logo" href="/" aria-label="SpeakUp home">
+          <Link className="community-mobile-logo" href="/" aria-label="SpeakUp home">
             <BrandLogo compact />
-          </a>
+          </Link>
           <div>
             <p className="section-label">
               {view === "profile"
@@ -831,16 +1072,20 @@ export default function Community() {
             <div className="profile-view__stats">
               <article>
                 <b>
-                  {posts.filter((post) => !post.anonymous && post.author === displayName).length}
+                  {profileStats
+                    ? profileStats.thoughts
+                    : posts.filter((post) => post.ownedByMe).length}
                 </b>
                 <span>Thoughts</span>
               </article>
               <article>
-                <b>{savedPosts.size}</b>
+                <b>{profileStats ? profileStats.saved : savedPosts.size}</b>
                 <span>Saved</span>
               </article>
               <article>
-                <b>{posts.filter((post) => post.liked).length}</b>
+                <b>
+                  {profileStats ? profileStats.liked : posts.filter((post) => post.liked).length}
+                </b>
                 <span>Liked</span>
               </article>
             </div>
@@ -865,7 +1110,9 @@ export default function Community() {
           <section className="explore-intro">
             <p className="section-label">SEARCH THE CONVERSATION</p>
             <h2>Find the questions others are carrying.</h2>
-            <p>Search by phrase, author, or topic, then narrow the results with the topic bar.</p>
+            <p>
+              Search every thought by phrase or topic, then narrow the results with the topic bar.
+            </p>
           </section>
         )}
 
@@ -895,7 +1142,7 @@ export default function Community() {
                     ),
                   );
                   markNotificationRead(item.id).catch(() => notify("Could not update notice"));
-                  if (item.postId) window.location.href = `/community/post/${item.postId}`;
+                  if (item.postId) router.push(`/community/post/${item.postId}`);
                 }}
               >
                 <span>
@@ -1062,21 +1309,61 @@ export default function Community() {
                         animate={{ height: "auto", opacity: 1 }}
                         exit={{ height: 0, opacity: 0 }}
                       >
-                        {post.comments.map((c) => (
-                          <div className="comment" key={c.id}>
+                        {threadComments(post.comments).map((c) => (
+                          <div
+                            className={`comment ${c.parentCommentId ? "is-reply" : ""}`}
+                            key={c.id}
+                          >
                             <span>{c.author[0]}</span>
-                            <p>
-                              <b>{c.author}</b>
-                              {c.body}
-                            </p>
+                            <div className="comment-body">
+                              <p>
+                                <b>{c.author}</b>
+                                {c.body}
+                              </p>
+                              <div className="comment-meta">
+                                {c.createdAt && <time>{relativeTime(c.createdAt)}</time>}
+                                <button
+                                  className={c.liked ? "liked" : ""}
+                                  onClick={() => toggleCommentLike(post.id, c.id)}
+                                  aria-label={c.liked ? "Unlike response" : "Like response"}
+                                >
+                                  <Icon icon={FavouriteIcon} size={13} />
+                                  {c.likes || "Like"}
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    setReplyTargets((current) => ({ ...current, [post.id]: c }));
+                                    setOpenComments(post.id);
+                                  }}
+                                >
+                                  Reply
+                                </button>
+                              </div>
+                            </div>
                           </div>
                         ))}
+                        {replyTargets[post.id] && (
+                          <div className="comment-reply-target">
+                            <span>Replying to {replyTargets[post.id]?.author}</span>
+                            <button
+                              onClick={() =>
+                                setReplyTargets((current) => ({ ...current, [post.id]: null }))
+                              }
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        )}
                         <div className="comment-box">
                           <input
-                            value={comment}
-                            onChange={(e) => setComment(e.target.value)}
+                            value={commentDrafts[post.id] || ""}
+                            onChange={(e) => setDraft(post.id, e.target.value)}
                             onKeyDown={(e) => e.key === "Enter" && addComment(post.id)}
-                            placeholder="Add to the conversation…"
+                            placeholder={
+                              replyTargets[post.id]
+                                ? `Reply to ${replyTargets[post.id]?.author}…`
+                                : "Add to the conversation…"
+                            }
                             aria-label="Write a comment"
                           />
                           <button onClick={() => addComment(post.id)} aria-label="Send comment">
@@ -1091,23 +1378,35 @@ export default function Community() {
             ))}
           </AnimatePresence>
         )}
-        {view !== "profile" && view !== "notices" && !visible.length && (
-          <div className="empty-feed">
-            <h2>{view === "saved" ? "Nothing saved yet." : "Nothing hidden here."}</h2>
-            <p>
-              {view === "saved"
-                ? "Use the bookmark on a post to keep it here."
-                : "Try another search or begin the conversation yourself."}
-            </p>
+        {view !== "profile" &&
+          view !== "notices" &&
+          !visible.length &&
+          !loadingFeed &&
+          !searching && (
+            <div className="empty-feed">
+              <h2>
+                {view === "saved"
+                  ? "Nothing saved yet."
+                  : searchTerm
+                    ? "No thoughts match that."
+                    : "The feed is quiet."}
+              </h2>
+              <p>
+                {view === "saved"
+                  ? "Use the bookmark on a post to keep it here."
+                  : "Try another search or begin the conversation yourself."}
+              </p>
+            </div>
+          )}
+        {(loadingFeed || searching) && view !== "profile" && view !== "notices" && (
+          <div className="community-status">
+            {searching ? "Searching the community…" : "Bringing the latest thoughts to light…"}
           </div>
-        )}
-        {loadingFeed && view !== "profile" && view !== "notices" && (
-          <div className="community-status">Bringing the latest thoughts to light…</div>
         )}
         {backendError && (
           <div className="community-status community-status--error">{backendError}</div>
         )}
-        {hasMore && view === "feed" && !loadingFeed && (
+        {hasMore && view === "feed" && !loadingFeed && !searchResults && (
           <button className="load-more" onClick={loadMorePosts}>
             Load more thoughts
           </button>
@@ -1132,27 +1431,33 @@ export default function Community() {
             grace.
           </h2>
           <p>Challenge ideas honestly. Treat people with dignity. Add light, not heat.</p>
-          <a href="/">
+          <Link href="/#values">
             Read our values <span>↗</span>
-          </a>
+          </Link>
         </div>
-        <div className="side-card">
-          <p className="section-label">TRENDING IN THE LIGHT</p>
-          {[
-            "Faith at work",
-            "Beyond church walls",
-            "Asking better questions",
-            "Scripture & culture",
-          ].map((x, i) => (
-            <button onClick={() => setSearch(x.split(" ")[0])} key={x}>
-              <span>0{i + 1}</span>
-              <p>
-                <b>{x}</b>
-                <small>{[128, 96, 74, 51][i]} thoughts</small>
-              </p>
-            </button>
-          ))}
-        </div>
+        {trending.length > 0 && (
+          <div className="side-card">
+            <p className="section-label">TRENDING IN THE LIGHT</p>
+            {trending.map((item, i) => (
+              <button
+                onClick={() => {
+                  setFilter(topics.includes(item.topic) ? item.topic : "For you");
+                  setSearch(topics.includes(item.topic) ? "" : item.topic);
+                  setView("feed");
+                }}
+                key={item.topic}
+              >
+                <span>0{i + 1}</span>
+                <p>
+                  <b>{item.topic}</b>
+                  <small>
+                    {item.count} {item.count === 1 ? "thought" : "thoughts"}
+                  </small>
+                </p>
+              </button>
+            ))}
+          </div>
+        )}
         <p className="community-foot">© 2026 SPEAKUP · TRUTH, UNSCRIPTED.</p>
       </aside>
 
@@ -1161,6 +1466,10 @@ export default function Community() {
           <div className="modal-wrap" role="presentation" onMouseDown={closeComposer}>
             <motion.form
               className="compose-modal"
+              ref={composerRef}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="compose-title"
               onSubmit={publish}
               onMouseDown={(e) => e.stopPropagation()}
               initial={{ opacity: 0, y: 30, scale: 0.98 }}
@@ -1170,7 +1479,9 @@ export default function Community() {
               <header>
                 <div>
                   <p className="section-label">{editingPostId ? "EDIT THOUGHT" : "NEW THOUGHT"}</p>
-                  <h2>{editingPostId ? "Refine your thought." : "Bring it to light."}</h2>
+                  <h2 id="compose-title">
+                    {editingPostId ? "Refine your thought." : "Bring it to light."}
+                  </h2>
                   <p className="compose-intro">
                     Share what you&apos;re learning, questioning, or seeing more clearly.
                   </p>
@@ -1186,7 +1497,7 @@ export default function Community() {
               </header>
               <div className="compose-author">
                 <span>
-                  {anonymous ? (
+                  {anonymousAccount || anonymous ? (
                     <Icon icon={AnonymousIcon} />
                   ) : (
                     displayName
@@ -1197,11 +1508,13 @@ export default function Community() {
                   )}
                 </span>
                 <p>
-                  <b>{anonymous ? "Anonymous" : displayName}</b>
+                  <b>{anonymousAccount || anonymous ? "Anonymous" : displayName}</b>
                   <small>
-                    {anonymous
-                      ? "Your identity will be protected"
-                      : "Posting to the SpeakUp community"}
+                    {anonymousAccount
+                      ? "Guest accounts always post anonymously"
+                      : anonymous
+                        ? "Your identity will be protected"
+                        : "Posting to the SpeakUp community"}
                   </small>
                 </p>
               </div>
@@ -1210,7 +1523,7 @@ export default function Community() {
                   <span>MAIN THOUGHT</span>
                   <textarea
                     className="compose-main"
-                    autoFocus
+                    data-autofocus
                     value={mainText}
                     onChange={(e) => setMainText(e.target.value)}
                     maxLength={800}
@@ -1246,10 +1559,11 @@ export default function Community() {
                     )}
                   </div>
                 </div>
-                <label className="anonymous-toggle">
+                <label className={`anonymous-toggle ${anonymousAccount ? "is-locked" : ""}`}>
                   <input
                     type="checkbox"
-                    checked={anonymous}
+                    checked={anonymousAccount || anonymous}
+                    disabled={anonymousAccount}
                     onChange={(e) => setAnonymous(e.target.checked)}
                   />
                   <span>
@@ -1257,7 +1571,11 @@ export default function Community() {
                   </span>
                   <p>
                     <b>Post anonymously</b>
-                    <small>Hide your name on this thought</small>
+                    <small>
+                      {anonymousAccount
+                        ? "Sign in to post under your name"
+                        : "Hide your name on this thought"}
+                    </small>
                   </p>
                 </label>
               </div>
@@ -1283,16 +1601,24 @@ export default function Community() {
           <div className="modal-wrap" onMouseDown={() => setIdentityOpen(false)}>
             <motion.div
               className="identity-modal"
+              ref={identityRef}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="identity-title"
               onMouseDown={(e) => e.stopPropagation()}
               initial={{ opacity: 0, scale: 0.97 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.97 }}
             >
-              <button className="modal-close" onClick={() => setIdentityOpen(false)}>
+              <button
+                className="modal-close"
+                onClick={() => setIdentityOpen(false)}
+                aria-label="Close"
+              >
                 <Icon icon={Cancel01Icon} />
               </button>
               <p className="section-label">YOUR IDENTITY</p>
-              <h2>Come as you are.</h2>
+              <h2 id="identity-title">Come as you are.</h2>
               <p>
                 You can participate without an account, use a simple display name, or protect your
                 identity on individual posts.
@@ -1336,16 +1662,20 @@ export default function Community() {
           <div className="modal-wrap" onMouseDown={closeShare}>
             <motion.div
               className="share-modal share-modal--card"
+              ref={shareRef}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="share-title"
               onMouseDown={(e) => e.stopPropagation()}
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 20 }}
             >
-              <button className="modal-close" onClick={closeShare}>
+              <button className="modal-close" onClick={closeShare} aria-label="Close">
                 <Icon icon={Cancel01Icon} />
               </button>
               <p className="section-label">SHARE THE LIGHT</p>
-              <h2>Carry it further.</h2>
+              <h2 id="share-title">Carry it further.</h2>
               {shareCards.length > 0 && (
                 <div className="share-carousel">
                   <button
@@ -1378,6 +1708,16 @@ export default function Community() {
                 </div>
               )}
               <div className="share-grid">
+                {canNativeShare && (
+                  <button
+                    className="share-native"
+                    onClick={() => shareViaDevice(sharePost)}
+                    disabled={!shareCards.length}
+                  >
+                    <Icon icon={SentIcon} />
+                    Share to apps
+                  </button>
+                )}
                 <button onClick={() => downloadShareCards(sharePost)} disabled={!shareCards.length}>
                   <Icon icon={Share08Icon} />
                   {shareCards.length > 1 ? `Download all ${shareCards.length}` : "Download card"}
