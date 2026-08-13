@@ -757,8 +757,7 @@ export default function Community() {
         image.onerror = reject;
         image.src = src;
       });
-    const baseVariant =
-      [...post.id].reduce((total, character) => total + character.charCodeAt(0), 0) % 5;
+    const postSeed = [...post.id].reduce((total, character) => total + character.charCodeAt(0), 0);
     const mainChunks = splitShareText(post.quote || post.body, post.quote ? 410 : 430);
     const supportingChunks = post.quote ? splitShareText(post.body, 300) : [];
     const pages: Array<{ main?: string; supporting?: string }> = mainChunks.map((main) => ({
@@ -778,29 +777,48 @@ export default function Community() {
       { bg: "#494949", fg: "#ffffff" },
       { bg: "#0b0b0b", fg: "#ffffff" },
     ];
-    const hero = await loadImage("/assets/brand/carry-the-light.png");
+    const imageSources = [
+      "/assets/brand/carry-the-light.png",
+      "/assets/brand/share-the-light.png",
+      "/assets/brand/step-into-light.png",
+    ];
+    const firstImageIndex = postSeed % imageSources.length;
+    const rotatedImageSources = [
+      ...imageSources.slice(firstImageIndex),
+      ...imageSources.slice(0, firstImageIndex),
+    ];
+    const backgroundSequence: Array<
+      | { kind: "image"; image: HTMLImageElement }
+      | { kind: "color"; theme: (typeof palette)[number] }
+    > = [
+      ...(await Promise.all(rotatedImageSources.map(loadImage))).map((image) => ({
+        kind: "image" as const,
+        image,
+      })),
+      ...palette.map((theme) => ({ kind: "color" as const, theme })),
+    ];
     return Promise.all(
       pages.map(async (page, pageIndex) => {
         const canvas = document.createElement("canvas");
         canvas.width = 1080;
         canvas.height = 1080;
         const ctx = canvas.getContext("2d")!;
-        const variant = (baseVariant + pageIndex) % 5;
-        const photo = variant === 1;
-        const theme = variant === 0 ? palette[3] : palette[variant - 2] || palette[0];
-        const light = photo ? "#ffffff" : theme.fg;
-        if (photo) {
-          const scale = Math.max(1080 / hero.width, 1080 / hero.height);
-          const width = hero.width * scale;
-          const height = hero.height * scale;
-          ctx.drawImage(hero, (1080 - width) / 2, (1080 - height) / 2, width, height);
+        const background = backgroundSequence[pageIndex % backgroundSequence.length];
+        const light = background.kind === "image" ? "#ffffff" : background.theme.fg;
+        if (background.kind === "image") {
+          const { image } = background;
+          const scale = Math.max(1080 / image.width, 1080 / image.height);
+          const width = image.width * scale;
+          const height = image.height * scale;
+          ctx.drawImage(image, (1080 - width) / 2, (1080 - height) / 2, width, height);
           const shade = ctx.createLinearGradient(0, 0, 0, 1080);
-          shade.addColorStop(0, "rgba(0,0,0,.3)");
-          shade.addColorStop(0.55, "rgba(0,0,0,.56)");
-          shade.addColorStop(1, "rgba(0,0,0,.9)");
+          shade.addColorStop(0, "rgba(0,0,0,.42)");
+          shade.addColorStop(0.5, "rgba(0,0,0,.62)");
+          shade.addColorStop(1, "rgba(0,0,0,.92)");
           ctx.fillStyle = shade;
           ctx.fillRect(0, 0, 1080, 1080);
         } else {
+          const { theme } = background;
           ctx.fillStyle = theme.bg;
           ctx.fillRect(0, 0, 1080, 1080);
           ctx.strokeStyle = light === "#ffffff" ? "rgba(255,255,255,.16)" : "rgba(11,11,11,.13)";
