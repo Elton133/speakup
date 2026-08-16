@@ -52,6 +52,26 @@ export default async function ConversationPage({ params }: Props) {
         </div>
         {post.quote && <h1>“{post.quote}”</h1>}
         <p className={post.quote ? "conversation-context" : "conversation-primary"}>{post.body}</p>
+        {post.media.map((media) =>
+          media.kind === "video" ? (
+            <video
+              key={media.id}
+              className="conversation-media"
+              src={media.url}
+              controls
+              playsInline
+              preload="metadata"
+            />
+          ) : (
+            <audio
+              key={media.id}
+              className="conversation-audio"
+              src={media.url}
+              controls
+              preload="metadata"
+            />
+          ),
+        )}
         <footer>
           <span>{post.anonymous ? "A" : post.author.slice(0, 2).toUpperCase()}</span>
           <div>

@@ -250,6 +250,19 @@
   margin: 22px 0;
   color: #333;
 }
+.community-post__media {
+  display: block;
+  width: 100%;
+  max-height: 520px;
+  margin: 24px 0;
+  background: #0b0b0b;
+  object-fit: contain;
+}
+.community-post__audio {
+  display: block;
+  width: 100%;
+  margin: 22px 0;
+}
 .post-permalink {
   display: inline-block;
   margin-top: 16px;
@@ -617,6 +630,22 @@
 .identity-modal .community-primary,
 .outline-button {
   width: 100%;
+}
+.google-auth-button {
+  width: 100%;
+  min-height: 44px;
+  display: flex;
+  justify-content: center;
+  transition: opacity 0.2s;
+}
+.google-auth-button.is-busy {
+  opacity: 0.5;
+  pointer-events: none;
+}
+.auth-error {
+  display: block;
+  margin-top: 10px;
+  color: #8b302a !important;
 }
 .divider {
   display: flex;
@@ -1217,6 +1246,69 @@
   font-size: 15px;
   line-height: 1.55;
 }
+.compose-media {
+  padding: 18px 34px;
+  border-bottom: 1px solid #d2cfc7;
+}
+.compose-media > small {
+  display: block;
+  margin-top: 10px;
+  color: #77746d;
+  font-size: 8px;
+}
+.compose-media__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.compose-media__actions button,
+.compose-media__preview button {
+  border: 1px solid #aaa79f;
+  background: transparent;
+  padding: 9px 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font: 700 9px var(--font-google-sans-flex);
+  cursor: pointer;
+}
+.compose-media__actions button.is-recording {
+  border-color: #9d241f;
+  color: #9d241f;
+}
+.compose-media__preview {
+  display: grid;
+  grid-template-columns: minmax(120px, 220px) 1fr;
+  gap: 16px;
+  align-items: center;
+}
+.compose-media__preview video {
+  width: 100%;
+  max-height: 140px;
+  background: #0b0b0b;
+}
+.compose-media__preview audio {
+  width: 100%;
+}
+.compose-media__preview > div {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 7px;
+}
+.compose-media__preview span {
+  max-width: 100%;
+  overflow: hidden;
+  font-size: 10px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.compose-media__preview small {
+  color: #77746d;
+  font-size: 8px;
+}
 .compose-options {
   padding: 22px 34px;
   display: grid;
@@ -1327,6 +1419,12 @@
   }
   .compose-options {
     padding: 20px 24px;
+    grid-template-columns: 1fr;
+  }
+  .compose-media {
+    padding-inline: 24px;
+  }
+  .compose-media__preview {
     grid-template-columns: 1fr;
   }
   .anonymous-toggle {

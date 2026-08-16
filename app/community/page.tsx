@@ -23,12 +23,15 @@ import {
   NewTwitterIcon,
   Notification01Icon,
   EyeOffIcon,
+  FileAudioIcon,
   Flag01Icon,
   Tick02Icon,
   Search01Icon,
   SentIcon,
   Share08Icon,
   UserCircleIcon,
+  Video01Icon,
+  AudioWaveformIcon,
 } from "@hugeicons/core-free-icons";
 import "./community.css";
 import { isSupabaseConfigured } from "../../lib/supabase/config";
@@ -38,6 +41,7 @@ import { PushNotificationSettings } from "../components/push-notification-settin
 import { seedPosts, topics } from "./data";
 import type { Comment, Post } from "./types";
 import {
+  attachRemoteMedia,
   createRemoteComment,
   createRemotePost,
   deleteRemotePost,
@@ -55,6 +59,7 @@ import {
   subscribeToNotifications,
   updateRemotePost,
   updateRemoteProfile,
+  uploadCommunityMedia,
   type CommunityNotice,
 } from "./community-api";
 const Icon = ({ icon, size = 19 }: { icon: typeof Home01Icon; size?: number }) => (
@@ -115,6 +120,10 @@ export default function Community() {
   const [mainText, setMainText] = useState("");
   const [body, setBody] = useState("");
   const [topic, setTopic] = useState("Reflection");
+  const [mediaFile, setMediaFile] = useState<File | null>(null);
+  const [mediaPreview, setMediaPreview] = useState("");
+  const [recording, setRecording] = useState(false);
+  const [mediaUploading, setMediaUploading] = useState(false);
   const [openComments, setOpenComments] = useState<string | null>(null);
   const [commentDrafts, setCommentDrafts] = useState<Record<string, string>>({});
   const [replyTargets, setReplyTargets] = useState<Record<string, Comment | null>>({});
@@ -143,6 +152,10 @@ export default function Community() {
   } | null>(null);
   const [trending, setTrending] = useState<Array<{ topic: string; count: number }>>([]);
   const noticeTimer = useRef<number | undefined>(undefined);
+  const mediaInputRef = useRef<HTMLInputElement>(null);
+  const recorderRef = useRef<MediaRecorder | null>(null);
+  const recordingStreamRef = useRef<MediaStream | null>(null);
+  const recordingChunksRef = useRef<Blob[]>([]);
   const router = useRouter();
   const composerRef = useDialog<HTMLFormElement>(composer);
   const identityRef = useDialog<HTMLDivElement>(identityOpen);
@@ -366,6 +379,68 @@ export default function Community() {
     window.location.href = "/";
   }
 
+  function clearMedia() {
+    if (mediaPreview) URL.revokeObjectURL(mediaPreview);
+    setMediaFile(null);
+    setMediaPreview("");
+    if (mediaInputRef.current) mediaInputRef.current.value = "";
+  }
+
+  function chooseMedia(file?: File) {
+    if (!file) return;
+    const kind = file.type.startsWith("video/")
+      ? "video"
+      : file.type.startsWith("audio/")
+        ? "audio"
+        : null;
+    const limit = kind === "video" ? 100 * 1024 * 1024 : 25 * 1024 * 1024;
+    if (!kind) return notify("Choose a video or audio file");
+    if (file.size > limit)
+      return notify(
+        `${kind === "video" ? "Videos" : "Audio files"} must be under ${kind === "video" ? "100 MB" : "25 MB"}`,
+      );
+    if (mediaPreview) URL.revokeObjectURL(mediaPreview);
+    setMediaFile(file);
+    setMediaPreview(URL.createObjectURL(file));
+  }
+
+  async function startRecording() {
+    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
+      notify("Audio recording is not supported in this browser");
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
+        ? "audio/webm;codecs=opus"
+        : "";
+      const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+      recordingChunksRef.current = [];
+      recordingStreamRef.current = stream;
+      recorderRef.current = recorder;
+      recorder.ondataavailable = (event) => {
+        if (event.data.size) recordingChunksRef.current.push(event.data);
+      };
+      recorder.onstop = () => {
+        const type = recorder.mimeType || "audio/webm";
+        const blob = new Blob(recordingChunksRef.current, { type });
+        chooseMedia(new File([blob], `speakup-recording-${Date.now()}.webm`, { type }));
+        stream.getTracks().forEach((track) => track.stop());
+        recordingStreamRef.current = null;
+        recorderRef.current = null;
+        setRecording(false);
+      };
+      recorder.start();
+      setRecording(true);
+    } catch {
+      notify("Microphone access was not granted");
+    }
+  }
+
+  function stopRecording() {
+    if (recorderRef.current?.state === "recording") recorderRef.current.stop();
+  }
+
   async function publish(e: FormEvent) {
     e.preventDefault();
     const featured = mainText.trim();
@@ -444,6 +519,17 @@ export default function Community() {
       likes: 0,
       ownedByMe: true,
       comments: [],
+      media: mediaFile
+        ? [
+            {
+              id: `local-${localId}`,
+              kind: mediaFile.type.startsWith("video/") ? "video" : "audio",
+              url: mediaPreview,
+              mimeType: mediaFile.type,
+              size: mediaFile.size,
+            },
+          ]
+        : [],
     };
     setPosts([newPost, ...posts]);
     setMainText("");
@@ -471,7 +557,31 @@ export default function Community() {
               : post,
           ),
         );
-        notify("Thought published");
+        if (mediaFile) {
+          setMediaUploading(true);
+          try {
+            const prepared = await uploadCommunityMedia(mediaFile);
+            const attached = await attachRemoteMedia(remotePost.id, prepared);
+            setPosts((current) =>
+              current.map((post) =>
+                post.id === remotePost.id ? { ...post, media: [attached] } : post,
+              ),
+            );
+            clearMedia();
+            notify("Thought and media published");
+          } catch (error) {
+            setPosts((current) =>
+              current.map((post) => (post.id === remotePost.id ? { ...post, media: [] } : post)),
+            );
+            notify(
+              error instanceof Error
+                ? error.message
+                : "The thought published, but its media did not upload",
+            );
+          } finally {
+            setMediaUploading(false);
+          }
+        } else notify("Thought published");
       } else notify("Saved on this device — sign in to publish across devices");
     } catch {
       notify("Saved locally; the community database could not be reached");
@@ -482,6 +592,7 @@ export default function Community() {
     setMainText("");
     setBody("");
     setTopic("Reflection");
+    clearMedia();
     setComposer(true);
   }
   function editPost(post: Post) {
@@ -498,6 +609,8 @@ export default function Community() {
     setEditingPostId(null);
     setMainText("");
     setBody("");
+    if (recording) stopRecording();
+    clearMedia();
   }
   async function like(id: string) {
     const post = posts.find((item) => item.id === id);
@@ -1287,6 +1400,26 @@ export default function Community() {
                   </div>
                   {post.quote && <blockquote>“{post.quote}”</blockquote>}
                   <p className="community-post__body">{post.body}</p>
+                  {(post.media ?? []).map((media) =>
+                    media.kind === "video" ? (
+                      <video
+                        className="community-post__media"
+                        key={media.id}
+                        src={media.url}
+                        controls
+                        playsInline
+                        preload="metadata"
+                      />
+                    ) : (
+                      <audio
+                        className="community-post__audio"
+                        key={media.id}
+                        src={media.url}
+                        controls
+                        preload="metadata"
+                      />
+                    ),
+                  )}
                   {!post.id.startsWith("seed-") && (
                     <a className="post-permalink" href={`/community/post/${post.id}`}>
                       Open conversation ↗
@@ -1559,6 +1692,48 @@ export default function Community() {
                   />
                 </label>
               </div>
+              {!editingPostId && (
+                <div className="compose-media">
+                  <input
+                    ref={mediaInputRef}
+                    type="file"
+                    hidden
+                    accept="video/mp4,video/webm,video/quicktime,audio/mpeg,audio/mp4,audio/x-m4a,audio/wav,audio/webm,audio/ogg"
+                    onChange={(event) => chooseMedia(event.target.files?.[0])}
+                  />
+                  {!mediaFile ? (
+                    <div className="compose-media__actions">
+                      <button type="button" onClick={() => mediaInputRef.current?.click()}>
+                        <Icon icon={Video01Icon} /> Add video or audio
+                      </button>
+                      <button
+                        type="button"
+                        className={recording ? "is-recording" : ""}
+                        onClick={recording ? stopRecording : startRecording}
+                      >
+                        <Icon icon={recording ? AudioWaveformIcon : FileAudioIcon} />
+                        {recording ? "Stop recording" : "Record audio"}
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="compose-media__preview">
+                      {mediaFile.type.startsWith("video/") ? (
+                        <video src={mediaPreview} controls playsInline />
+                      ) : (
+                        <audio src={mediaPreview} controls />
+                      )}
+                      <div>
+                        <span>{mediaFile.name}</span>
+                        <small>{(mediaFile.size / 1024 / 1024).toFixed(1)} MB</small>
+                        <button type="button" onClick={clearMedia}>
+                          Remove
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                  <small>MP4/WebM video up to 100 MB · audio up to 25 MB</small>
+                </div>
+              )}
               <div className="compose-options">
                 <div className="compose-topics">
                   <p>CHOOSE A SPACE</p>
@@ -1603,7 +1778,7 @@ export default function Community() {
                 </small>
                 <button
                   className="community-primary"
-                  disabled={!mainText.trim() && !body.trim()}
+                  disabled={mediaUploading || (!mainText.trim() && !body.trim())}
                   type="submit"
                 >
                   {editingPostId ? "Save changes" : "Publish thought"} <Icon icon={SentIcon} />

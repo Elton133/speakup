@@ -13,6 +13,12 @@ export type ConversationPost = {
   likes: number;
   liked: boolean;
   ownedByMe: boolean;
+  media: Array<{
+    id: string;
+    kind: "video" | "audio";
+    url: string;
+    mimeType: string;
+  }>;
   comments: Array<{
     id: string;
     author: string;
@@ -43,6 +49,12 @@ type PostRow = {
     comment_likes: Array<{ user_id: string }>;
   }>;
   post_likes: Array<{ user_id: string }>;
+  post_media: Array<{
+    id: string;
+    kind: "video" | "audio";
+    public_url: string;
+    mime_type: string;
+  }>;
 };
 
 export const getConversationPost = cache(async (id: string): Promise<ConversationPost | null> => {
@@ -51,7 +63,7 @@ export const getConversationPost = cache(async (id: string): Promise<Conversatio
   const { data, error } = await supabase
     .from("posts")
     .select(
-      "id,author_id,topic,body,quote,is_anonymous,created_at,profiles!posts_author_id_fkey(display_name),comments(id,body,is_anonymous,created_at,parent_comment_id,profiles!comments_author_id_fkey(display_name),comment_likes(user_id)),post_likes(user_id)",
+      "id,author_id,topic,body,quote,is_anonymous,created_at,profiles!posts_author_id_fkey(display_name),comments(id,body,is_anonymous,created_at,parent_comment_id,profiles!comments_author_id_fkey(display_name),comment_likes(user_id)),post_likes(user_id),post_media(id,kind,public_url,mime_type)",
     )
     .eq("id", id)
     .maybeSingle();
@@ -71,6 +83,12 @@ export const getConversationPost = cache(async (id: string): Promise<Conversatio
     likes: row.post_likes.length,
     liked: Boolean(user && row.post_likes.some((like) => like.user_id === user.id)),
     ownedByMe: Boolean(user && row.author_id === user.id),
+    media: (row.post_media ?? []).map((item) => ({
+      id: item.id,
+      kind: item.kind,
+      url: item.public_url,
+      mimeType: item.mime_type,
+    })),
     comments: row.comments
       .map((comment) => ({
         id: comment.id,

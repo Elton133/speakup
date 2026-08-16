@@ -22,4 +22,13 @@ export type Post = {
   liked?: boolean;
   ownedByMe?: boolean;
   comments: Comment[];
+  media?: PostMedia[];
+};
+
+export type PostMedia = {
+  id: string;
+  kind: "video" | "audio";
+  url: string;
+  mimeType: string;
+  size: number;
 };

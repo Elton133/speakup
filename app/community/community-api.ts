@@ -1,7 +1,15 @@
 import type { User } from "@supabase/supabase-js";
 import { createClient } from "../../lib/supabase/client";
 import { isSupabaseConfigured } from "../../lib/supabase/config";
-import type { Post } from "./types";
+import type { Post, PostMedia } from "./types";
+
+export type PreparedMedia = {
+  key: string;
+  publicUrl: string;
+  kind: "video" | "audio";
+  mimeType: string;
+  size: number;
+};
 
 type PostRow = {
   id: string;
@@ -22,6 +30,13 @@ type PostRow = {
     comment_likes: Array<{ user_id: string }>;
   }>;
   post_likes: Array<{ user_id: string }>;
+  post_media: Array<{
+    id: string;
+    kind: "video" | "audio";
+    public_url: string;
+    mime_type: string;
+    size_bytes: number;
+  }>;
 };
 
 const POST_SELECT =
@@ -29,12 +44,16 @@ const POST_SELECT =
   "profiles!posts_author_id_fkey(display_name)," +
   "comments(id,body,is_anonymous,created_at,parent_comment_id," +
   "profiles!comments_author_id_fkey(display_name),comment_likes(user_id))," +
-  "post_likes(user_id)";
+  "post_likes(user_id)," +
+  "post_media(id,kind,public_url,mime_type,size_bytes)";
 
 // Commas and parentheses delimit filters inside an `or(...)` group, and % / _
 // are ilike wildcards. Drop them so a search phrase stays a search phrase.
 function escapeSearchTerm(term: string) {
-  return term.replace(/[,()%_\\*]/g, " ").replace(/\s+/g, " ").trim();
+  return term
+    .replace(/[,()%_\\*]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function initials(name: string) {
@@ -96,8 +115,7 @@ export async function loadCommunity(
   let query = supabase.from("posts").select(POST_SELECT);
 
   const term = escapeSearchTerm(options.search ?? "");
-  if (term)
-    query = query.or(`body.ilike.%${term}%,quote.ilike.%${term}%,topic.ilike.%${term}%`);
+  if (term) query = query.or(`body.ilike.%${term}%,quote.ilike.%${term}%,topic.ilike.%${term}%`);
   if (options.topic) query = query.eq("topic", options.topic);
 
   const { data, error } = await query
@@ -136,6 +154,13 @@ export async function loadCommunity(
         likes: row.post_likes.length,
         liked: Boolean(user && row.post_likes.some((like) => like.user_id === user.id)),
         ownedByMe: Boolean(user && row.author_id === user.id),
+        media: (row.post_media ?? []).map((item) => ({
+          id: item.id,
+          kind: item.kind,
+          url: item.public_url,
+          mimeType: item.mime_type,
+          size: item.size_bytes,
+        })),
         comments: row.comments
           .map((comment) => ({
             id: comment.id,
@@ -144,9 +169,7 @@ export async function loadCommunity(
             createdAt: comment.created_at,
             parentCommentId: comment.parent_comment_id,
             likes: comment.comment_likes.length,
-            liked: Boolean(
-              user && comment.comment_likes.some((like) => like.user_id === user.id),
-            ),
+            liked: Boolean(user && comment.comment_likes.some((like) => like.user_id === user.id)),
           }))
           .sort((a, b) => a.createdAt.localeCompare(b.createdAt)),
       };
@@ -163,6 +186,7 @@ export function subscribeToCommunity(onChange: () => void) {
     .on("postgres_changes", { event: "*", schema: "public", table: "comments" }, onChange)
     .on("postgres_changes", { event: "*", schema: "public", table: "post_likes" }, onChange)
     .on("postgres_changes", { event: "*", schema: "public", table: "comment_likes" }, onChange)
+    .on("postgres_changes", { event: "*", schema: "public", table: "post_media" }, onChange)
     .subscribe();
   return () => {
     supabase.removeChannel(channel);
@@ -358,6 +382,52 @@ export async function createRemotePost(input: {
     .single();
   if (error) throw error;
   return { id: post.id as string, anonymous: isAnonymous };
+}
+
+export async function uploadCommunityMedia(file: File): Promise<PreparedMedia> {
+  const response = await fetch("/api/media/upload-url", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ fileName: file.name, mimeType: file.type, size: file.size }),
+  });
+  const result = (await response.json()) as PreparedMedia & {
+    uploadUrl: string;
+    error?: string;
+  };
+  if (!response.ok) throw new Error(result.error || "The media upload could not be prepared.");
+
+  const upload = await fetch(result.uploadUrl, {
+    method: "PUT",
+    headers: { "Content-Type": result.mimeType },
+    body: file,
+  });
+  if (!upload.ok) throw new Error("Cloudflare could not receive the media file.");
+  return result;
+}
+
+export async function attachRemoteMedia(postId: string, media: PreparedMedia): Promise<PostMedia> {
+  const { supabase, user } = await ensureCommunityUser();
+  const { data, error } = await supabase
+    .from("post_media")
+    .insert({
+      post_id: postId,
+      uploader_id: user.id,
+      kind: media.kind,
+      object_key: media.key,
+      public_url: media.publicUrl,
+      mime_type: media.mimeType,
+      size_bytes: media.size,
+    })
+    .select("id,kind,public_url,mime_type,size_bytes")
+    .single();
+  if (error) throw error;
+  return {
+    id: data.id as string,
+    kind: data.kind as "video" | "audio",
+    url: data.public_url as string,
+    mimeType: data.mime_type as string,
+    size: data.size_bytes as number,
+  };
 }
 
 export async function setRemoteLike(postId: string, liked: boolean) {
