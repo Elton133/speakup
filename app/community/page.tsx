@@ -124,6 +124,7 @@ export default function Community() {
   const [mediaPreview, setMediaPreview] = useState("");
   const [recording, setRecording] = useState(false);
   const [mediaUploading, setMediaUploading] = useState(false);
+  const [publishing, setPublishing] = useState(false);
   const [openComments, setOpenComments] = useState<string | null>(null);
   const [commentDrafts, setCommentDrafts] = useState<Record<string, string>>({});
   const [replyTargets, setReplyTargets] = useState<Record<string, Comment | null>>({});
@@ -531,10 +532,7 @@ export default function Community() {
           ]
         : [],
     };
-    setPosts([newPost, ...posts]);
-    setMainText("");
-    setBody("");
-    setComposer(false);
+    setPublishing(true);
     try {
       const remotePost = await createRemotePost({
         topic,
@@ -543,20 +541,24 @@ export default function Community() {
         anonymous: postAnonymously,
       });
       if (remotePost) {
-        setPosts((current) =>
-          current.map((post) =>
-            post.id === localId
-              ? {
-                  ...post,
-                  id: remotePost.id,
-                  anonymous: remotePost.anonymous,
-                  author: remotePost.anonymous ? "Anonymous" : post.author,
-                  handle: remotePost.anonymous ? "Identity protected" : post.handle,
-                  initials: remotePost.anonymous ? "A" : post.initials,
-                }
-              : post,
-          ),
-        );
+        const publishedPost = {
+          ...newPost,
+          id: remotePost.id,
+          anonymous: remotePost.anonymous,
+          author: remotePost.anonymous ? "Anonymous" : newPost.author,
+          handle: remotePost.anonymous ? "Identity protected" : newPost.handle,
+          initials: remotePost.anonymous ? "A" : newPost.initials,
+        };
+        setPosts((current) => [
+          publishedPost,
+          ...current.filter((post) => post.id !== remotePost.id),
+        ]);
+        setUserId(remotePost.userId);
+        setAnonymousAccount(remotePost.anonymousAccount);
+        setAnonymous(remotePost.anonymousAccount);
+        setMainText("");
+        setBody("");
+        setComposer(false);
         if (mediaFile) {
           setMediaUploading(true);
           try {
@@ -582,9 +584,13 @@ export default function Community() {
             setMediaUploading(false);
           }
         } else notify("Thought published");
-      } else notify("Saved on this device — sign in to publish across devices");
-    } catch {
-      notify("Saved locally; the community database could not be reached");
+      }
+    } catch (error) {
+      const reason =
+        error instanceof Error ? error.message : "The community database could not be reached.";
+      notify(`Not published yet: ${reason}`);
+    } finally {
+      setPublishing(false);
     }
   }
   function beginPost() {
@@ -1149,6 +1155,18 @@ export default function Community() {
             <Icon icon={Add01Icon} />
           </button>
         </header>
+        {(!userId || anonymousAccount) && view !== "profile" && (
+          <section className="community-auth-invite" aria-label="Account sign in">
+            <div>
+              <p className="section-label">KEEP WHAT YOU BUILD</p>
+              <h2>Carry your light across devices.</h2>
+              <p>Your anonymous identity and existing posts stay with you.</p>
+            </div>
+            <div className="community-auth-invite__action">
+              <GoogleAuthButton />
+            </div>
+          </section>
+        )}
         {view !== "profile" && view !== "notices" && (
           <div className="topic-tabs" role="tablist" aria-label="Filter conversations">
             {topics.map((t) => (
@@ -1778,10 +1796,11 @@ export default function Community() {
                 </small>
                 <button
                   className="community-primary"
-                  disabled={mediaUploading || (!mainText.trim() && !body.trim())}
+                  disabled={publishing || mediaUploading || (!mainText.trim() && !body.trim())}
                   type="submit"
                 >
-                  {editingPostId ? "Save changes" : "Publish thought"} <Icon icon={SentIcon} />
+                  {publishing ? "Publishing…" : editingPostId ? "Save changes" : "Publish thought"}{" "}
+                  <Icon icon={SentIcon} />
                 </button>
               </footer>
             </motion.form>
@@ -1830,12 +1849,19 @@ export default function Community() {
                   const nextDisplayName = displayName.trim() || "Guest seeker";
                   setDisplayName(nextDisplayName);
                   window.localStorage.setItem("speakup-display-name", nextDisplayName);
-                  setIdentityOpen(false);
                   try {
                     const synced = await updateRemoteProfile(nextDisplayName);
-                    notify(synced ? "Profile updated" : "Display name saved on this device");
-                  } catch {
-                    notify("Display name saved locally");
+                    setUserId(synced.userId);
+                    setAnonymousAccount(synced.anonymous);
+                    setAnonymous(synced.anonymous);
+                    setIdentityOpen(false);
+                    notify("Display name saved");
+                  } catch (error) {
+                    const reason =
+                      error instanceof Error
+                        ? error.message
+                        : "Guest access could not connect to the community database.";
+                    notify(`Saved on this device only: ${reason}`);
                   }
                 }}
               >

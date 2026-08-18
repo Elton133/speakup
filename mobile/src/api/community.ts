@@ -113,13 +113,19 @@ export async function loadFeed(search = "") {
     .limit(30);
   const term = search.trim().replace(/[,()%_\\*]/g, " ");
   if (term) query = query.or(`body.ilike.%${term}%,quote.ilike.%${term}%,topic.ilike.%${term}%`);
-  const [{ data, error }, { data: savedRows }] = await Promise.all([
+  const [{ data, error }, { data: savedRows }, { data: blockedRows }] = await Promise.all([
     query,
     auth.user ? supabase.from("saved_posts").select("post_id") : Promise.resolve({ data: [] }),
+    auth.user
+      ? supabase.from("blocked_members").select("blocked_id").eq("blocker_id", auth.user.id)
+      : Promise.resolve({ data: [] }),
   ]);
   if (error) throw error;
   const saved = new Set((savedRows || []).map((row) => row.post_id as string));
-  return ((data || []) as unknown as PostRow[]).map((row) => mapPost(row, auth.user?.id, saved));
+  const blocked = new Set((blockedRows || []).map((row) => row.blocked_id as string));
+  return ((data || []) as unknown as PostRow[])
+    .filter((row) => !blocked.has(row.author_id))
+    .map((row) => mapPost(row, auth.user?.id, saved));
 }
 
 export async function loadPost(id: string) {
@@ -154,14 +160,12 @@ export async function toggleSaved(postId: string, saved: boolean) {
 
 export async function addComment(postId: string, body: string) {
   const user = await ensureCommunityUser();
-  const { error } = await supabase
-    .from("comments")
-    .insert({
-      post_id: postId,
-      author_id: user.id,
-      body: body.trim(),
-      is_anonymous: Boolean(user.is_anonymous),
-    });
+  const { error } = await supabase.from("comments").insert({
+    post_id: postId,
+    author_id: user.id,
+    body: body.trim(),
+    is_anonymous: Boolean(user.is_anonymous),
+  });
   if (error) throw error;
 }
 
@@ -224,17 +228,15 @@ export async function uploadPostMedia(
   });
   if (!uploaded.ok) throw new Error("Cloudflare could not receive the media.");
   const user = await ensureCommunityUser();
-  const { error } = await supabase
-    .from("post_media")
-    .insert({
-      post_id: postId,
-      uploader_id: user.id,
-      kind: prepared.kind,
-      object_key: prepared.key,
-      public_url: prepared.publicUrl,
-      mime_type: prepared.mimeType,
-      size_bytes: prepared.size,
-    });
+  const { error } = await supabase.from("post_media").insert({
+    post_id: postId,
+    uploader_id: user.id,
+    kind: prepared.kind,
+    object_key: prepared.key,
+    public_url: prepared.publicUrl,
+    mime_type: prepared.mimeType,
+    size_bytes: prepared.size,
+  });
   if (error) throw error;
 }
 
@@ -275,4 +277,40 @@ export async function updateDisplayName(displayName: string) {
     .update({ display_name: displayName.trim() })
     .eq("id", user.id);
   if (error) throw error;
+}
+
+export async function reportPost(
+  postId: string,
+  reason: "spam" | "harassment" | "misinformation" | "other",
+) {
+  const user = await ensureCommunityUser();
+  const { error } = await supabase
+    .from("reports")
+    .upsert(
+      { reporter_id: user.id, post_id: postId, reason },
+      { onConflict: "reporter_id,post_id" },
+    );
+  if (error) throw error;
+}
+
+export async function blockMember(memberId: string) {
+  const user = await ensureCommunityUser();
+  if (user.id === memberId) throw new Error("You cannot block your own account.");
+  const { error } = await supabase
+    .from("blocked_members")
+    .upsert({ blocker_id: user.id, blocked_id: memberId });
+  if (error) throw error;
+}
+
+export async function deleteAccount() {
+  const { data } = await supabase.auth.getSession();
+  if (!data.session) throw new Error("No active account was found.");
+  const baseUrl = process.env.EXPO_PUBLIC_WEB_URL || "https://speakup.forum";
+  const response = await fetch(`${baseUrl}/api/account`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${data.session.access_token}` },
+  });
+  const result = (await response.json()) as { error?: string };
+  if (!response.ok) throw new Error(result.error || "Account deletion failed.");
+  await supabase.auth.signOut();
 }

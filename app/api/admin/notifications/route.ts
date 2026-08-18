@@ -56,11 +56,34 @@ export async function POST(request: Request) {
   const privateKey = process.env.VAPID_PRIVATE_KEY;
   const subject = process.env.VAPID_SUBJECT;
   let pushed = 0;
+  const { data: allSubscriptions } = await admin
+    .from("push_subscriptions")
+    .select("id,endpoint,subscription");
+  const expoSubscriptions = (allSubscriptions || []).filter(
+    (row) => (row.subscription as { transport?: string })?.transport === "expo",
+  );
+  if (expoSubscriptions.length) {
+    const response = await fetch("https://exp.host/--/api/v2/push/send", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify(
+        expoSubscriptions.map((row) => ({
+          to: row.endpoint,
+          title,
+          body: message,
+          sound: "default",
+          channelId: "community",
+          data: { url: destinationUrl },
+        })),
+      ),
+    });
+    if (response.ok) pushed += expoSubscriptions.length;
+  }
   if (publicKey && privateKey && subject) {
     webpush.setVapidDetails(subject, publicKey, privateKey);
-    const { data: subscriptions } = await admin
-      .from("push_subscriptions")
-      .select("id,subscription");
+    const subscriptions = (allSubscriptions || []).filter(
+      (row) => (row.subscription as { transport?: string })?.transport !== "expo",
+    );
     const results = await Promise.allSettled(
       (subscriptions || []).map(async (row) => {
         try {

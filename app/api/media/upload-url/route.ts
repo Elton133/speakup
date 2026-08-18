@@ -1,6 +1,7 @@
 import { PutObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { NextResponse } from "next/server";
+import { createClient as createTokenClient } from "@supabase/supabase-js";
 import { createR2Client, getR2Config } from "../../../../lib/cloudflare/r2";
 import { createClient } from "../../../../lib/supabase/server";
 
@@ -25,8 +26,22 @@ function safeExtension(fileName: string, mimeType: string) {
 }
 
 export async function POST(request: Request) {
-  const supabase = await createClient();
-  const { data: auth } = await supabase.auth.getUser();
+  const bearer = request.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
+  const cookieClient = await createClient();
+  const tokenClient =
+    bearer && process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+      ? createTokenClient(
+          process.env.NEXT_PUBLIC_SUPABASE_URL,
+          process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+          {
+            auth: { persistSession: false },
+            global: { headers: { Authorization: `Bearer ${bearer}` } },
+          },
+        )
+      : null;
+  const { data: auth } = tokenClient
+    ? await tokenClient.auth.getUser(bearer)
+    : await cookieClient.auth.getUser();
   if (!auth.user) return NextResponse.json({ error: "Authentication required." }, { status: 401 });
 
   let body: { fileName?: string; mimeType?: string; size?: number };

@@ -2,6 +2,7 @@ import {
   Bookmark02Icon,
   Comment01Icon,
   FavouriteIcon,
+  MoreHorizontalIcon,
   Share08Icon,
 } from "@hugeicons/core-free-icons";
 import * as Haptics from "expo-haptics";
@@ -9,19 +10,73 @@ import { useAudioPlayer } from "expo-audio";
 import { Link } from "expo-router";
 import { useVideoPlayer, VideoView } from "expo-video";
 import { useState } from "react";
-import { Pressable, Share, Text, View } from "react-native";
+import { Alert, Pressable, Share, Text, View } from "react-native";
+import { useQueryClient } from "@tanstack/react-query";
 import { Icon } from "@/components/icon";
 import type { CommunityMedia, CommunityPost } from "@/api/community";
-import { toggleLike, toggleSaved } from "@/api/community";
+import { blockMember, reportPost, toggleLike, toggleSaved } from "@/api/community";
 import { palette, radius, spacing, type } from "@/theme";
 
 export function PostCard({ post }: { post: CommunityPost }) {
   const [liked, setLiked] = useState(post.liked);
   const [saved, setSaved] = useState(Boolean(post.saved));
+  const [hidden, setHidden] = useState(false);
+  const queryClient = useQueryClient();
   const action = (callback: () => void) => {
     Haptics.selectionAsync();
     callback();
   };
+  if (hidden) return null;
+  const sendReport = (reason: "spam" | "harassment" | "misinformation" | "other") =>
+    reportPost(post.id, reason)
+      .then(() => Alert.alert("Report received", "Our moderation team will review this post."))
+      .catch((error) =>
+        Alert.alert(
+          "Could not report",
+          error instanceof Error ? error.message : "Please try again.",
+        ),
+      );
+  function openOptions() {
+    if (post.ownedByMe) {
+      Alert.alert("Post options", undefined, [
+        { text: "Hide from this view", onPress: () => setHidden(true) },
+        { text: "Cancel", style: "cancel" },
+      ]);
+      return;
+    }
+    Alert.alert("Post options", undefined, [
+      {
+        text: "Report post",
+        onPress: () =>
+          Alert.alert("Why are you reporting this?", undefined, [
+            { text: "Spam", onPress: () => sendReport("spam") },
+            { text: "Harassment", onPress: () => sendReport("harassment") },
+            { text: "Misinformation", onPress: () => sendReport("misinformation") },
+            { text: "Other", onPress: () => sendReport("other") },
+            { text: "Cancel", style: "cancel" },
+          ]),
+      },
+      {
+        text: "Block this member",
+        style: "destructive",
+        onPress: () =>
+          blockMember(post.authorId)
+            .then(() => {
+              setHidden(true);
+              queryClient.invalidateQueries({ queryKey: ["community-feed"] });
+              Alert.alert("Member blocked", "Their posts will no longer appear in your feed.");
+            })
+            .catch((error) =>
+              Alert.alert(
+                "Could not block",
+                error instanceof Error ? error.message : "Please try again.",
+              ),
+            ),
+      },
+      { text: "Hide this post", onPress: () => setHidden(true) },
+      { text: "Cancel", style: "cancel" },
+    ]);
+  }
   return (
     <Link href={{ pathname: "/post/[id]", params: { id: post.id } }} asChild>
       <Link.Trigger>
@@ -61,25 +116,37 @@ export function PostCard({ post }: { post: CommunityPost }) {
                 </Text>
               </View>
             </View>
-            <View
-              style={{
-                paddingHorizontal: spacing.sm,
-                paddingVertical: spacing.xs,
-                borderWidth: 1,
-                borderColor: "#D6D3CB",
-                borderRadius: radius.full,
-              }}
-            >
-              <Text
+            <View style={{ flexDirection: "row", alignItems: "center", gap: spacing.xs }}>
+              <View
                 style={{
-                  fontSize: 9,
-                  fontWeight: "800",
-                  color: palette.charcoal,
-                  textTransform: "uppercase",
+                  paddingHorizontal: spacing.sm,
+                  paddingVertical: spacing.xs,
+                  borderWidth: 1,
+                  borderColor: "#D6D3CB",
+                  borderRadius: radius.full,
                 }}
               >
-                {post.topic}
-              </Text>
+                <Text
+                  style={{
+                    fontSize: 9,
+                    fontWeight: "800",
+                    color: palette.charcoal,
+                    textTransform: "uppercase",
+                  }}
+                >
+                  {post.topic}
+                </Text>
+              </View>
+              <Pressable
+                accessibilityLabel="Post options"
+                onPress={(event) => {
+                  event.stopPropagation();
+                  openOptions();
+                }}
+                style={{ padding: spacing.xs }}
+              >
+                <Icon icon={MoreHorizontalIcon} color={palette.grey} />
+              </Pressable>
             </View>
           </View>
           {post.quote && (

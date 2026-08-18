@@ -2,6 +2,7 @@ import { Notification01Icon, Settings02Icon, ShieldUserIcon } from "@hugeicons/c
 import { useState } from "react";
 import { Alert, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { router, type Href } from "expo-router";
 import { loadProfile, updateDisplayName } from "@/api/community";
 import { Icon } from "@/components/icon";
 import { ScreenHeading } from "@/components/screen-heading";
@@ -141,8 +142,9 @@ export default function ProfileScreen() {
       />
       <ProfileAction
         icon={Settings02Icon}
-        title="Settings"
-        subtitle="Appearance, sound and account"
+        title="Safety & privacy"
+        subtitle="Guidelines, legal information and account deletion"
+        onPress={() => router.push("/safety" as Href)}
       />
     </ScrollView>
   );

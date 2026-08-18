@@ -358,7 +358,7 @@ export async function updateRemoteProfile(displayName: string) {
     .update({ display_name: displayName })
     .eq("id", user.id);
   if (error) throw error;
-  return true;
+  return { userId: user.id, anonymous: Boolean(user.is_anonymous) };
 }
 
 export async function createRemotePost(input: {
@@ -381,7 +381,12 @@ export async function createRemotePost(input: {
     .select("id")
     .single();
   if (error) throw error;
-  return { id: post.id as string, anonymous: isAnonymous };
+  return {
+    id: post.id as string,
+    anonymous: isAnonymous,
+    userId: user.id,
+    anonymousAccount: Boolean(user.is_anonymous),
+  };
 }
 
 export async function uploadCommunityMedia(file: File): Promise<PreparedMedia> {

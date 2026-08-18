@@ -43,6 +43,7 @@ export default function RootLayout() {
         <Stack screenOptions={{ headerShown: false }}>
           <Stack.Screen name="(tabs)" />
           <Stack.Screen name="post/[id]" options={{ presentation: "card" }} />
+          <Stack.Screen name="safety" options={{ presentation: "card" }} />
         </Stack>
       </ThemeProvider>
     </QueryClientProvider>

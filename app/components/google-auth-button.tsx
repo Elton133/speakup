@@ -154,11 +154,11 @@ export function GoogleAuthButton() {
     return (
       <>
         <button className="outline-button" disabled={busy} onClick={authenticateAnonymousOrSignOut}>
-          {busy ? "Connecting…" : user.is_anonymous ? "Secure with Google" : "Sign out"}
+          {busy ? "Connecting…" : user.is_anonymous ? "Continue with Google" : "Sign out"}
         </button>
         <small>
           {user.is_anonymous
-            ? "Connect Google to keep this anonymous account across devices."
+            ? "Keep this anonymous account, its posts, and its streak across devices."
             : `Signed in as ${user.email}`}
         </small>
         {error && <small className="auth-error">{error}</small>}
